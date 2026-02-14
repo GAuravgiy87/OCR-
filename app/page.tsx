@@ -1056,24 +1056,6 @@ export default function Home() {
     }
   };
 
-  const resetToUpload = () => {
-    setFile(null);
-    setPageResults([]);
-    setLoading(false);
-    setProgress(0);
-    setCurrentPage(0);
-    setTotalPages(0);
-    setError('');
-    setManualRotation({});
-    setShowMapping(false);
-    setColumnMapping({});
-    setMappedData(null);
-    setEditMode(false);
-    setEditedData({});
-    setCurrentPageView(0);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -1089,21 +1071,6 @@ export default function Home() {
           </h1>
           <p className="text-gray-600 text-lg">Extract and analyze tables from images and PDFs with AI precision</p>
         </div>
-
-        {/* Back Button - Show when results are available */}
-        {pageResults.length > 0 && (
-          <div className="mb-6">
-            <button
-              onClick={resetToUpload}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm hover:shadow-md"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              Upload New Document
-            </button>
-          </div>
-        )}
 
         {/* Upload Section - Hide when results are available */}
         {pageResults.length === 0 && (
