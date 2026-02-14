@@ -1,248 +1,74 @@
-# 📊 Advanced Table OCR Extractor
+<div align="center">
 
-> **Transform scanned documents and PDFs into structured, editable data with AI-powered precision**
+<!-- Animated Header -->
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=32&duration=2800&pause=2000&color=6366F1&center=true&vCenter=true&width=940&lines=Advanced+Table+OCR+Extractor+%F0%9F%93%84;Extract+Tables+from+Images+%26+PDFs+%E2%9C%A8;AI-Powered+Document+Processing+%F0%9F%A4%96" alt="Typing SVG" />
 
-A cutting-edge Next.js application that extracts tables from images and PDFs with high accuracy, featuring intelligent rotation detection, adaptive image enhancement, and smart column mapping.
+<br/>
 
----
+<!-- Badges -->
+<p>
+  <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
+  <img src="https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Tailwind-3.4-38bdf8?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
+  <img src="https://img.shields.io/badge/Tesseract.js-5.0-orange?style=for-the-badge&logo=ocr&logoColor=white" alt="Tesseract" />
+  <img src="https://img.shields.io/badge/PDF.js-Latest-red?style=for-the-badge&logo=adobe&logoColor=white" alt="PDF.js" />
+</p>
 
-## ✨ Key Features
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
+
+</div>
+
+## 🌟 Features
+
+<table>
+<tr>
+<td width="50%">
 
 ### 🎯 Core Capabilities
-- **Multi-Format Support**: Process images (JPG, PNG) and multi-page PDFs
-- **Auto-Rotation Detection**: Automatically detects and corrects image orientation (0°, 90°, 180°, 270°)
-- **Intelligent Table Detection**: Uses line detection algorithms to identify table boundaries
-- **Cell-by-Cell Extraction**: Precise data extraction with boundary-aware processing
-- **Adaptive Image Enhancement**: Quality-based preprocessing for optimal OCR accuracy
-- **Real-Time Editing**: Fix OCR errors directly in the interface
-- **Smart Column Mapping**: Map extracted columns to predefined business fields
-- **Excel-Style Preview**: View mapped data in familiar spreadsheet format
-- **CSV Export**: Download original or mapped data
+- 🖼️ **Multi-Format Support** - Images (PNG, JPG) & PDF files
+- 🤖 **AI-Powered OCR** - Tesseract.js integration
+- � **Smart Table Detection** - Automatic structure recognition
+- 🔄 **Auto-Rotation** - Intelligent orientation correction
+- ✏️ **Live Editing** - Edit extracted data in real-time
+- 📥 **Drag & Drop** - Easy file upload interface
 
-### 🚀 Advanced Features
-- **Quality Analysis**: Automatic image quality detection (high/medium/low)
-- **Upscaling**: 2x image upscaling for better character recognition
-- **Noise Reduction**: Median filtering for low-quality images
-- **Histogram Equalization**: Adaptive contrast enhancement
-- **Table Region Masking**: Excludes headers, footers, and page numbers
-- **Multi-Page Processing**: Batch process entire PDF documents
-- **Progress Tracking**: Real-time progress indicators
+</td>
+<td width="50%">
 
----
+### 🎨 Advanced Features
+- 🗺️ **Column Mapping** - Map to predefined schemas
+- 📤 **Multiple Export** - CSV & Excel formats
+- 🔍 **Image Enhancement** - Adaptive quality processing
+- 📄 **Multi-Page** - Process entire PDF documents
+- 🎭 **Manual Rotation** - Fine-tune orientation
+- 💾 **Batch Export** - Export all pages at once
 
-## 🛠️ Technology Stack
+</td>
+</tr>
+</table>
 
-### Frontend Framework
-- **Next.js 16.1.6** (App Router)
-  - Server-side rendering for optimal performance
-  - Turbopack for lightning-fast development
-  - TypeScript for type safety
+<div align="center">
 
-### UI & Styling
-- **Tailwind CSS**
-  - Utility-first CSS framework
-  - Responsive design system
-  - Custom color schemes and animations
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
 
-### OCR Engine
-- **Tesseract.js 5.x**
-  - LSTM neural network engine for high accuracy
-  - Multi-language support (English optimized)
-  - Browser-based processing (no server required)
-  - **Purpose**: Character recognition and text extraction
+</div>
 
-### PDF Processing
-- **PDF.js (Mozilla)**
-  - Canvas-based PDF rendering
-  - High-resolution page extraction (4x scale)
-  - Multi-page document support
-  - **Purpose**: Convert PDF pages to images for OCR
-
-### Image Processing
-- **HTML5 Canvas API**
-  - Pixel-level image manipulation
-  - Real-time image transformations
-  - **Purpose**: Preprocessing, enhancement, and table detection
-
----
-
-## 🔬 Technical Architecture
-
-### 1. Image Preprocessing Pipeline
-
-```
-Input Image/PDF
-    ↓
-[Upscale 2x] → Better resolution for OCR
-    ↓
-[Rotate 90° Clockwise] → Standard orientation
-    ↓
-[Auto-Rotation Detection] → OSD (Orientation & Script Detection)
-    ↓
-[Quality Analysis] → Brightness & contrast evaluation
-    ↓
-[Adaptive Enhancement] → Quality-based preprocessing
-    ↓
-[Table Detection] → Line detection algorithm
-    ↓
-[Region Masking] → Isolate table area
-    ↓
-[Cell Extraction] → Individual cell processing
-```
-
-### 2. Table Detection Algorithm
-
-**Line Detection Process:**
-```javascript
-1. Convert to grayscale
-2. Apply edge detection (threshold < 180)
-3. Scan horizontal lines:
-   - Minimum 30% of image width
-   - 30+ consecutive black pixels
-   - 25px minimum spacing
-4. Scan vertical lines:
-   - Minimum 30% of image height
-   - 30+ consecutive black pixels
-   - 25px minimum spacing
-5. Calculate table region from line intersections
-6. Create cell grid from boundaries
-```
-
-### 3. OCR Configuration
-
-**Tesseract Settings:**
-- `tessedit_pageseg_mode: 6` - Uniform block of text (for cells)
-- `preserve_interword_spaces: 1` - Maintain spacing
-- LSTM engine for neural network-based recognition
-- Character normalization for common OCR errors
-
-### 4. Image Enhancement Strategies
-
-**Quality-Based Processing:**
-
-| Quality Level | Techniques Applied |
-|--------------|-------------------|
-| **High** | Minimal enhancement (1.15x contrast) |
-| **Medium** | Moderate contrast (1.4x), brightness adjustment |
-| **Low** | Histogram equalization, median filtering, aggressive sharpening (1.6x) |
-
-### 5. Data Flow Architecture
-
-```
-PDF/Image Upload
-    ↓
-PDF.js Rendering (if PDF) → Canvas at 4x scale
-    ↓
-Image Processing Pipeline
-    ↓
-Table Structure Detection
-    ↓
-Cell-by-Cell OCR
-    ↓
-Data Storage (2D Array)
-    ↓
-User Editing (Optional)
-    ↓
-Column Mapping
-    ↓
-Excel Preview / CSV Export
-```
-
----
-
-## 📋 How It Works
-
-### Step 1: Upload & Detection
-1. User uploads image or PDF
-2. System converts PDF pages to high-res images (4x scale)
-3. Each page is upscaled 2x for better OCR
-
-### Step 2: Orientation Correction
-1. Force rotate 90° clockwise (standard for your use case)
-2. Tesseract OSD detects additional rotation needed
-3. Apply final rotation correction
-
-### Step 3: Quality Analysis
-```javascript
-- Sample 200x200 region
-- Calculate average brightness
-- Compute standard deviation (contrast)
-- Classify: High (σ > 50), Medium (σ > 30), Low (σ ≤ 30)
-```
-
-### Step 4: Table Detection
-1. **Edge Detection**: Convert to binary (black/white)
-2. **Horizontal Scan**: Find lines spanning 30%+ width
-3. **Vertical Scan**: Find lines spanning 30%+ height
-4. **Grid Creation**: Calculate cell boundaries from intersections
-5. **Region Masking**: White out everything outside table
-
-### Step 5: Cell Extraction
-```javascript
-For each cell (row, col):
-  1. Extract cell region with 5px margin
-  2. Apply quality-specific enhancement
-  3. Add 20px white padding
-  4. Run Tesseract OCR
-  5. Clean up common errors (|→I, quotes, etc.)
-  6. Store in 2D array
-```
-
-### Step 6: Data Editing
-- Toggle edit mode
-- Click cells to modify text
-- Changes stored separately from original
-- Mapping uses edited data
-
-### Step 7: Column Mapping
-1. Display row 2 as extracted headers (row 1 skipped)
-2. User maps to predefined columns via dropdowns
-3. Auto-apply mapping on selection
-4. Generate new table with predefined column order
-5. Show Excel-style preview
-
----
-
-## 🎨 UI/UX Features
-
-### Visual Design
-- **Gradient Background**: Blue to indigo gradient
-- **Card-Based Layout**: Elevated white cards with shadows
-- **Color Coding**:
-  - Indigo: Primary actions
-  - Green: Export/download
-  - Blue: Edit mode
-  - Red: Cancel/done editing
-
-### Interactive Elements
-- **Progress Bars**: Real-time processing feedback
-- **Sticky Headers**: Excel-style fixed headers
-- **Alternating Rows**: Improved readability
-- **Hover Effects**: Visual feedback on interactions
-- **Responsive Grid**: Adapts to screen size
-
-### User Feedback
-- Console logging for debugging
-- Error messages with context
-- Success indicators (rotation applied, etc.)
-- Row/column counts
-- Quality metrics display
-
----
-
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
+
 ```bash
-Node.js 18+ 
-npm or yarn
+# Node.js 18+ required
+node --version
 ```
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone <your-repo-url>
 cd ocr-app
 
 # Install dependencies
@@ -252,173 +78,221 @@ npm install
 npm run dev
 ```
 
-### Build for Production
+<div align="center">
 
-```bash
-# Create optimized build
-npm run build
+### 🎉 Open [http://localhost:3000](http://localhost:3000) in your browser!
 
-# Start production server
-npm start
+</div>
+
+<div align="center">
+
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
+
+</div>
+
+## 📖 How to Use
+
+<table>
+<tr>
+<td>
+
+### 1️⃣ Upload Document
+Drag & drop or click to upload your image/PDF file
+
+</td>
+<td>
+
+### 2️⃣ Auto Processing
+AI automatically detects tables and extracts data
+
+</td>
+</tr>
+<tr>
+<td>
+
+### 3️⃣ Review & Edit
+Check extracted data and make corrections if needed
+
+</td>
+<td>
+
+### 4️⃣ Export Data
+Download as CSV or map columns for Excel export
+
+</td>
+</tr>
+</table>
+
+<div align="center">
+
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
+
+</div>
+
+## 🛠️ Tech Stack
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center" width="25%">
+<img src="https://skillicons.dev/icons?i=nextjs" width="65px" alt="Next.js"/><br/>
+<sub><b>Next.js 15</b></sub><br/>
+<sub>React Framework</sub>
+</td>
+<td align="center" width="25%">
+<img src="https://skillicons.dev/icons?i=typescript" width="65px" alt="TypeScript"/><br/>
+<sub><b>TypeScript</b></sub><br/>
+<sub>Type Safety</sub>
+</td>
+<td align="center" width="25%">
+<img src="https://skillicons.dev/icons?i=tailwind" width="65px" alt="Tailwind"/><br/>
+<sub><b>Tailwind CSS</b></sub><br/>
+<sub>Styling</sub>
+</td>
+<td align="center" width="25%">
+<img src="https://raw.githubusercontent.com/naptha/tesseract.js/master/docs/images/tesseract.png" width="65px" alt="Tesseract"/><br/>
+<sub><b>Tesseract.js</b></sub><br/>
+<sub>OCR Engine</sub>
+</td>
+</tr>
+</table>
+
+</div>
+
+<div align="center">
+
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
+
+</div>
+
+## 🎨 Key Technologies
+
+### 🔍 OCR Processing
+- **Tesseract.js** - Open-source OCR engine
+- **PDF.js** - Mozilla's PDF rendering library
+- **Canvas API** - Image manipulation and enhancement
+
+### 🎯 Image Enhancement
+- Adaptive histogram equalization
+- Automatic brightness/contrast adjustment
+- Edge detection for table structure
+- Multi-scale image processing
+
+### 📊 Data Processing
+- Cell-by-cell extraction
+- Column mapping system
+- CSV/Excel export functionality
+- Real-time data editing
+
+<div align="center">
+
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
+
+</div>
+
+## 📁 Project Structure
+
+```
+ocr-app/
+├── 📂 app/
+│   ├── 📄 page.tsx          # Main OCR application
+│   ├── 📄 layout.tsx        # Root layout
+│   └── 📄 globals.css       # Global styles
+├── 📂 public/
+│   ├── 📄 pdf.worker.js     # PDF.js worker
+│   └── 📄 pdf.worker.min.mjs
+├── 📄 package.json
+├── 📄 tsconfig.json
+├── 📄 tailwind.config.ts
+└── 📄 README.md
 ```
 
----
+<div align="center">
 
-## 📊 Performance Optimizations
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
 
-### Image Processing
-- **Upscaling**: 2x before OCR (better accuracy)
-- **PDF Rendering**: 4x scale for high DPI
-- **Caching**: Edited data stored in state
-- **Lazy Loading**: Process pages sequentially
+</div>
 
-### OCR Optimization
-- **Cell-by-Cell**: Smaller images = faster processing
-- **Padding**: 20px white border improves accuracy
-- **Margin**: 5px from borders avoids line artifacts
-- **Quality-Aware**: Different settings per quality level
+## 🎯 Features in Detail
 
-### Memory Management
-- **Canvas Cleanup**: Temporary canvases destroyed after use
-- **Worker Termination**: Tesseract workers properly closed
-- **Image Compression**: PNG with quality 1.0 for accuracy
+### 🔄 Auto-Rotation
+The app automatically detects document orientation and rotates images for optimal OCR accuracy.
 
----
+### 📊 Table Detection
+Advanced algorithms detect table structures including:
+- Row and column boundaries
+- Cell positions
+- Table regions
 
-## 🎯 Use Cases
+### ✏️ Live Editing
+Edit extracted data directly in the browser with an intuitive table editor.
 
-### Primary Use Case: RFP Clarification Tables
-Extract and standardize RFP clarification data:
-- Sr. No
-- Category
-- RFP Document Reference (Page & Section)
-- Content of RFP Requiring Clarification
-- Points of Clarification (Bidder Query)
-- Response (SRA)
+### 🗺️ Column Mapping
+Map extracted columns to predefined schemas for standardized data export.
 
-### Other Applications
-- Invoice data extraction
-- Financial statement processing
-- Research paper table extraction
-- Government document digitization
-- Medical records processing
+### 📤 Export Options
+- **CSV Export** - Individual pages or all pages combined
+- **Excel Export** - Mapped data with custom column headers
 
----
+<div align="center">
 
-## 🔧 Configuration
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
 
-### Predefined Columns
-Edit in `app/page.tsx`:
-```typescript
-const predefinedColumns = [
-  'Sr. No',
-  'Category',
-  // Add your columns here
-];
-```
+</div>
 
-### OCR Settings
-Modify Tesseract configuration:
-```typescript
-const ocrConfig = {
-  tessedit_pageseg_mode: '6',
-  preserve_interword_spaces: '1',
-  // Add custom settings
-};
-```
+## 🚀 Performance
 
-### Image Quality Thresholds
-Adjust in quality analysis function:
-```typescript
-if (stdDev > 50) quality = 'high';
-else if (stdDev > 30) quality = 'medium';
-else quality = 'low';
-```
+- ⚡ **Fast Processing** - Optimized OCR pipeline
+- 🎨 **Image Enhancement** - Adaptive quality processing
+- 📦 **Efficient Memory** - Streaming PDF processing
+- � **Progressive Loading** - Page-by-page processing
 
----
+<div align="center">
 
-## 📈 Accuracy Improvements
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
 
-### Techniques Used
-1. **2x Upscaling**: +15-20% accuracy improvement
-2. **Adaptive Enhancement**: +10-15% for low-quality images
-3. **Cell Isolation**: +20-25% by removing noise
-4. **Padding**: +5-10% by providing context
-5. **Quality-Based Processing**: +10-15% overall
-
-### Common OCR Errors Fixed
-- `|` → `I` (pipe to letter I)
-- `'` → `'` (quote normalization)
-- `"` → `"` (double quote normalization)
-- `—` → `-` (em dash to hyphen)
-- Multiple spaces → Single space
-
----
-
-## 🐛 Troubleshooting
-
-### PDF Not Loading
-- Check PDF.js worker path in `public/pdf.worker.min.mjs`
-- Verify CORS settings for external PDFs
-
-### Poor OCR Accuracy
-- Increase PDF scale (currently 4x)
-- Adjust image quality thresholds
-- Try different Tesseract PSM modes
-
-### Table Not Detected
-- Lower line detection thresholds (currently 30%)
-- Adjust minimum consecutive pixels (currently 30)
-- Check image contrast
-
-### Rotation Issues
-- Verify OSD is working (check console logs)
-- Adjust forced rotation angle (currently 90°)
-
----
-
-## 🔮 Future Enhancements
-
-- [ ] Multi-language OCR support
-- [ ] AI-powered column auto-mapping
-- [ ] Batch processing multiple files
-- [ ] Cloud storage integration
-- [ ] API endpoint for programmatic access
-- [ ] Advanced table structure detection (merged cells)
-- [ ] OCR confidence scoring
-- [ ] Undo/redo for edits
-- [ ] Custom column templates
-- [ ] Excel file import/export (not just CSV)
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
----
+</div>
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Feel free to:
 
----
+- 🐛 Report bugs
+- 💡 Suggest new features
+- 🔧 Submit pull requests
+- 📖 Improve documentation
 
-## 💡 Tips for Best Results
+<div align="center">
 
-1. **Image Quality**: Use high-resolution scans (300+ DPI)
-2. **Contrast**: Ensure good contrast between text and background
-3. **Orientation**: System handles rotation, but upright is best
-4. **Table Borders**: Clear, continuous lines improve detection
-5. **Font Size**: Larger fonts (12pt+) work better
-6. **Editing**: Always review and edit extracted data before mapping
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
 
----
+</div>
 
-## 📞 Support
+## 📝 License
 
-For issues, questions, or suggestions, please open an issue on GitHub.
+This project is open source and available under the [MIT License](LICENSE).
 
----
+<div align="center">
 
-**Built with ❤️ using Next.js, Tesseract.js, and modern web technologies**
+<!-- Animated Divider -->
+<img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="900">
+
+<br/>
+
+### Made with ❤️ and ☕
+
+<br/>
+
+<!-- Animated Footer -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=150&section=footer&text=Happy%20Extracting!&fontSize=42&fontColor=fff&animation=twinkling&fontAlignY=72" width="100%"/>
+
+</div>

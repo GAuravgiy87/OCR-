@@ -34,6 +34,8 @@ export default function Home() {
   const [mappedData, setMappedData] = useState<string[][] | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editedData, setEditedData] = useState<{ [pageIndex: number]: string[][] }>({});
+  const [isDragging, setIsDragging] = useState(false);
+  const [currentPageView, setCurrentPageView] = useState(0);
 
   // Predefined columns for mapping
   const predefinedColumns = [
@@ -67,21 +69,7 @@ export default function Home() {
     setPageResults(updatedResults);
   };
 
-  const exportToCSV = (tableData: TableData, pageNum: number) => {
-    if (!tableData.rows) return;
-    
-    const csv = tableData.rows.map(row => 
-      row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')
-    ).join('\n');
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `table_page_${pageNum}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+
 
   const exportAllToCSV = () => {
     const allTables = pageResults.filter(r => r.tableData.isTable && r.tableData.rows);
@@ -956,9 +944,30 @@ export default function Home() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFile = e.target.files?.[0];
-    if (!uploadedFile) return;
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      await processFile(droppedFile);
+    }
+  };
+
+  const processFile = async (uploadedFile: File) => {
 
     if (!pdfWorkerReady && uploadedFile.type === 'application/pdf') {
       setError('PDF worker is still loading. Please wait a moment and try again.');
@@ -966,6 +975,7 @@ export default function Home() {
     }
 
     setFile(uploadedFile);
+    setCurrentPageView(0);
     setPageResults([]);
     setLoading(true);
     setProgress(0);
@@ -1024,74 +1034,218 @@ export default function Home() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFile = e.target.files?.[0];
+    if (!uploadedFile) return;
+    await processFile(uploadedFile);
+  };
+
+  const goToNextPage = () => {
+    if (currentPageView < pageResults.length - 1) {
+      setCurrentPageView(currentPageView + 1);
+      // Smooth scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPageView > 0) {
+      setCurrentPageView(currentPageView - 1);
+      // Smooth scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const resetToUpload = () => {
+    setFile(null);
+    setPageResults([]);
+    setLoading(false);
+    setProgress(0);
+    setCurrentPage(0);
+    setTotalPages(0);
+    setError('');
+    setManualRotation({});
+    setShowMapping(false);
+    setColumnMapping({});
+    setMappedData(null);
+    setEditMode(false);
+    setEditedData({});
+    setCurrentPageView(0);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold text-center mb-8 text-indigo-900">
-          Advanced Table OCR Extractor
-        </h1>
-
-        <div className="bg-white rounded-lg shadow-xl p-8 mb-8">
-          <label className="block mb-4">
-            <span className="text-lg font-semibold text-gray-700 mb-2 block">
-              Upload Image or PDF
-            </span>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={handleFileUpload}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
-            />
-          </label>
-
-          {loading && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-indigo-700">
-                  {totalPages > 0 
-                    ? `Processing page ${currentPage} of ${totalPages}...` 
-                    : 'Processing...'}
-                </span>
-                <span className="text-sm font-medium text-indigo-700">
-                  {progress}%
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div
-                  className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
+        {/* Header */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mb-4 shadow-lg">
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+            Advanced Table OCR Extractor
+          </h1>
+          <p className="text-gray-600 text-lg">Extract and analyze tables from images and PDFs with AI precision</p>
         </div>
 
+        {/* Back Button - Show when results are available */}
         {pageResults.length > 0 && (
-          <div className="bg-white rounded-lg shadow-xl p-6 mb-8">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-800">
-                Extracted {pageResults.length} page{pageResults.length > 1 ? 's' : ''}
-              </h2>
-              <div className="flex gap-3">
+          <div className="mb-6">
+            <button
+              onClick={resetToUpload}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Upload New Document
+            </button>
+          </div>
+        )}
+
+        {/* Upload Section - Hide when results are available */}
+        {pageResults.length === 0 && (
+          <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-100 hover:shadow-2xl transition-shadow duration-300">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <div>
+                <span className="text-lg font-semibold text-gray-800 block">
+                  Upload Your Document
+                </span>
+                <span className="text-sm text-gray-500">Drag & drop or click to upload • Supports images (PNG, JPG) and PDF files</span>
+              </div>
+            </div>
+            
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`relative transition-all duration-300 ${
+                isDragging 
+                  ? 'border-4 border-indigo-500 bg-indigo-50 scale-[1.02]' 
+                  : 'border-2 border-dashed border-gray-300 hover:border-indigo-400'
+              } rounded-xl p-8`}
+            >
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={handleFileUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                id="file-upload"
+              />
+              <label htmlFor="file-upload" className="cursor-pointer">
+                <div className="flex flex-col items-center justify-center gap-4">
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+                    isDragging 
+                      ? 'bg-indigo-600 scale-110' 
+                      : 'bg-gradient-to-br from-indigo-500 to-purple-600'
+                  }`}>
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-semibold text-gray-700 mb-1">
+                      {isDragging ? 'Drop your file here' : 'Drag & drop your file here'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      or <span className="text-indigo-600 font-semibold">browse</span> to choose a file
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <span className="px-3 py-1 bg-gray-100 rounded-full">PNG</span>
+                    <span className="px-3 py-1 bg-gray-100 rounded-full">JPG</span>
+                    <span className="px-3 py-1 bg-gray-100 rounded-full">PDF</span>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {loading && (
+              <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-semibold text-indigo-900">
+                      {totalPages > 0 
+                        ? `Processing page ${currentPage} of ${totalPages}` 
+                        : 'Processing your document'}
+                    </span>
+                  </div>
+                  <span className="text-sm font-bold text-indigo-700 bg-white px-3 py-1 rounded-full">
+                    {progress}%
+                  </span>
+                </div>
+                <div className="w-full bg-indigo-200 rounded-full h-3 overflow-hidden shadow-inner">
+                  <div
+                    className="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out shadow-lg"
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-red-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-sm text-red-800 font-medium">{error}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {pageResults.length > 0 && (
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl shadow-lg p-6 mb-8 border border-green-200">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center shadow-md">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Successfully Extracted!
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    {pageResults.length} page{pageResults.length > 1 ? 's' : ''} processed
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
                 {pageResults.some(r => r.tableData.isTable) && (
                   <>
                     <button
                       onClick={() => setShowMapping(!showMapping)}
-                      className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                      className="px-6 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                     >
-                      {showMapping ? 'Hide Mapping' : 'Map Columns'}
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        {showMapping ? 'Hide Mapping' : 'Map Columns'}
+                      </span>
                     </button>
                     <button
                       onClick={exportAllToCSV}
-                      className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                      className="px-6 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                     >
-                      Export All to CSV
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Export All to CSV
+                      </span>
                     </button>
                   </>
                 )}
@@ -1101,31 +1255,24 @@ export default function Home() {
         )}
 
         {showMapping && pageResults.length > 0 && pageResults.some(r => r.tableData.isTable && r.tableData.rows) && (
-          <div className="bg-white rounded-lg shadow-xl p-6 mb-8">
-            <h2 className="text-2xl font-bold mb-6 text-indigo-900">Column Mapping</h2>
-            
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3 text-gray-900">
-                Extracted Columns (from row 2 of first table):
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {(() => {
-                  const firstTable = pageResults.find(r => r.tableData.isTable && r.tableData.rows);
-                  if (!firstTable) return null;
-                  const pageIndex = pageResults.indexOf(firstTable);
-                  const tableRows = editedData[pageIndex] || firstTable.tableData.rows;
-                  return tableRows?.[1]?.map((col, idx) => (
-                    <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-900 rounded-full text-sm font-medium">
-                      {col || `Column ${idx + 1}`}
-                    </span>
-                  ));
-                })()}
+          <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-gray-100">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
               </div>
+              <h2 className="text-2xl font-bold text-gray-800">Column Mapping</h2>
             </div>
+            
 
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3 text-gray-900">
-                Map to Predefined Columns:
+
+            <div className="mb-6 bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 border border-gray-200">
+              <h3 className="text-lg font-semibold mb-4 text-gray-800 flex items-center gap-2">
+                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Map to Predefined Columns
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {predefinedColumns.map((predefinedCol) => {
@@ -1135,14 +1282,14 @@ export default function Home() {
                   const tableRows = editedData[pageIndex] || firstTable.tableData.rows;
                   const extractedHeaders = tableRows?.[1] || [];
                   return (
-                    <div key={predefinedCol} className="flex items-center gap-3">
-                      <label className="w-32 text-sm font-semibold text-gray-900">
-                        {predefinedCol}:
+                    <div key={predefinedCol} className="flex flex-col gap-2">
+                      <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                        {predefinedCol}
                       </label>
                       <select
                         value={columnMapping[predefinedCol] || ''}
                         onChange={(e) => handleColumnMapping(predefinedCol, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 font-medium"
+                        className="px-4 py-2.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 font-medium bg-white hover:border-indigo-400 transition-colors cursor-pointer"
                       >
                         <option value="">-- Select Column --</option>
                         {extractedHeaders.map((col, idx) => (
@@ -1157,41 +1304,60 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={applyMapping}
-                className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                className="px-6 py-2.5 text-sm font-semibold text-indigo-700 bg-indigo-100 rounded-xl hover:bg-indigo-200 transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
               >
-                Refresh Mapping
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh Mapping
+                </span>
               </button>
               {mappedData && (
                 <button
                   onClick={exportMappedData}
-                  className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                  className="px-6 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                 >
-                  Download Excel
+                  <span className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Download Excel
+                  </span>
                 </button>
               )}
             </div>
 
             {mappedData && (
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Mapped Data (Excel Preview):
-                  </h3>
-                  <span className="text-sm text-gray-600">
-                    {mappedData.length - 1} rows × {mappedData[0].length} columns
-                  </span>
+              <div className="mt-8 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
+                <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center shadow-sm">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800">
+                        Mapped Data Preview
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {mappedData.length - 1} rows × {mappedData[0].length} columns
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border-2 border-gray-300 overflow-auto max-h-[600px]">
+                <div className="bg-white rounded-xl border-2 border-green-300 overflow-auto max-h-[600px] shadow-inner">
                   <table className="min-w-full border-collapse">
-                    <thead className="sticky top-0 bg-green-600 text-white">
+                    <thead className="sticky top-0 bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md">
                       <tr>
                         {mappedData[0].map((header, idx) => (
                           <th
                             key={idx}
-                            className="border border-gray-400 px-4 py-3 text-left text-sm font-bold"
+                            className="border-r border-green-500 last:border-r-0 px-4 py-3 text-left text-sm font-bold"
                           >
                             {header}
                           </th>
@@ -1202,12 +1368,12 @@ export default function Home() {
                       {mappedData.slice(1).map((row, rowIndex) => (
                         <tr 
                           key={rowIndex} 
-                          className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                          className={`${rowIndex % 2 === 0 ? 'bg-white' : 'bg-green-50'} hover:bg-green-100 transition-colors`}
                         >
                           {row.map((cell, cellIndex) => (
                             <td
                               key={cellIndex}
-                              className="border border-gray-300 px-4 py-2 text-sm text-gray-900"
+                              className="border border-gray-200 px-4 py-2.5 text-sm text-gray-900"
                             >
                               {cell || '-'}
                             </td>
@@ -1222,7 +1388,69 @@ export default function Home() {
           </div>
         )}
 
-        {pageResults.map((result, index) => (
+        {/* Navigation Controls */}
+        {pageResults.length > 1 && (
+          <div className="bg-white rounded-2xl shadow-lg p-4 mb-8 border border-gray-100">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={goToPreviousPage}
+                disabled={currentPageView === 0}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold transition-all duration-200 ${
+                  currentPageView === 0
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Previous
+              </button>
+              
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-600">Page</span>
+                <div className="flex items-center gap-2">
+                  {pageResults.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setCurrentPageView(idx);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className={`w-10 h-10 rounded-lg font-bold transition-all duration-200 ${
+                        idx === currentPageView
+                          ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md scale-110'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-sm font-medium text-gray-600">of {pageResults.length}</span>
+              </div>
+              
+              <button
+                onClick={goToNextPage}
+                disabled={currentPageView === pageResults.length - 1}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold transition-all duration-200 ${
+                  currentPageView === pageResults.length - 1
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                }`}
+              >
+                Next
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {pageResults.filter((_, index) => index === currentPageView).map((result, index) => {
+          const actualIndex = currentPageView;
+          return (
           <div key={index} className="mb-12 bg-white rounded-lg shadow-xl p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -1239,14 +1467,14 @@ export default function Home() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => rotatePageManually(index, 90)}
+                  onClick={() => rotatePageManually(actualIndex, 90)}
                   className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                   title="Rotate 90° clockwise"
                 >
                   ↻ 90°
                 </button>
                 <button
-                  onClick={() => rotatePageManually(index, -90)}
+                  onClick={() => rotatePageManually(actualIndex, -90)}
                   className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                   title="Rotate 90° counter-clockwise"
                 >
@@ -1255,82 +1483,94 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div>
-                <h3 className="text-xl font-semibold mb-4 text-gray-800">
-                  Original Image
-                </h3>
-                <img
-                  src={result.originalImage}
-                  alt={`Page ${result.pageNumber} Original`}
-                  className="w-full h-auto rounded-lg border-2 border-gray-200 mb-4"
-                />
-                <h3 className="text-xl font-semibold mb-4 text-gray-800 mt-6">
-                  Processed Image
-                </h3>
-                <img
-                  src={result.processedImage}
-                  alt={`Page ${result.pageNumber} Processed`}
-                  className="w-full h-auto rounded-lg border-2 border-gray-200"
-                />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+              <div className="space-y-6">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                  <h3 className="text-lg font-bold mb-3 text-gray-800 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Original Image
+                  </h3>
+                  <img
+                    src={result.originalImage}
+                    alt={`Page ${result.pageNumber} Original`}
+                    className="w-full h-auto rounded-lg border-2 border-blue-300 shadow-md hover:shadow-lg transition-shadow"
+                  />
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
+                  <h3 className="text-lg font-bold mb-3 text-gray-800 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                    </svg>
+                    Processed Image
+                  </h3>
+                  <img
+                    src={result.processedImage}
+                    alt={`Page ${result.pageNumber} Processed`}
+                    className="w-full h-auto rounded-lg border-2 border-purple-300 shadow-md hover:shadow-lg transition-shadow"
+                  />
+                </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-semibold text-gray-800">
+                  <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
                     Extracted Table Data
                   </h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={toggleEditMode}
-                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                        editMode 
-                          ? 'bg-red-600 text-white hover:bg-red-700' 
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                    >
-                      {editMode ? 'Done Editing' : 'Edit Table'}
-                    </button>
-                    {result.tableData.isTable && result.tableData.rows && (
-                      <button
-                        onClick={() => exportToCSV(result.tableData, result.pageNumber)}
-                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
-                      >
-                        Export to CSV
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    onClick={toggleEditMode}
+                    className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center gap-2 ${
+                      editMode 
+                        ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white hover:from-red-600 hover:to-pink-700' 
+                        : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {editMode ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      )}
+                    </svg>
+                    {editMode ? 'Done Editing' : 'Edit Table'}
+                  </button>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-[800px]">
+                <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-4 border-2 border-gray-200 overflow-auto max-h-[800px] shadow-inner">
                   {result.tableData.isTable && result.tableData.rows ? (
                     <div className="overflow-x-auto">
-                      <table className="min-w-full border-collapse border-2 border-gray-600">
+                      <table className="min-w-full border-collapse border-2 border-gray-400 shadow-sm">
                         <tbody>
                           {(() => {
-                            const tableRows = editedData[index] || result.tableData.rows;
+                            const tableRows = editedData[actualIndex] || result.tableData.rows;
                             // Skip first row, start from second row
                             return tableRows.slice(1).map((row, rowIndex) => (
                               <tr 
                                 key={rowIndex} 
                                 className={
                                   rowIndex === 0 
-                                    ? 'bg-indigo-200 font-bold' 
+                                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold' 
                                     : rowIndex % 2 === 0
-                                    ? 'bg-white' 
-                                    : 'bg-gray-100'
+                                    ? 'bg-white hover:bg-blue-50' 
+                                    : 'bg-gray-50 hover:bg-blue-50'
                                 }
                               >
                                 {row.map((cell, cellIndex) => (
                                   <td
                                     key={cellIndex}
-                                    className="border border-gray-400 px-3 py-2 text-xs text-gray-900 align-top"
+                                    className={`border border-gray-300 px-3 py-2 text-xs align-top transition-colors ${
+                                      rowIndex === 0 ? 'text-white' : 'text-gray-900'
+                                    }`}
                                   >
                                     {editMode ? (
                                       <input
                                         type="text"
                                         value={cell}
-                                        onChange={(e) => handleCellEdit(index, rowIndex + 1, cellIndex, e.target.value)}
-                                        className="w-full min-w-[100px] px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        onChange={(e) => handleCellEdit(actualIndex, rowIndex + 1, cellIndex, e.target.value)}
+                                        className="w-full min-w-[100px] px-2 py-1.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 hover:border-indigo-400 transition-colors"
                                       />
                                     ) : (
                                       <div className="min-h-[20px]">
@@ -1346,7 +1586,7 @@ export default function Home() {
                       </table>
                     </div>
                   ) : (
-                    <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800">
+                    <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800 p-4 bg-white rounded-lg border border-gray-300">
                       {result.tableData.text}
                     </pre>
                   )}
@@ -1354,7 +1594,8 @@ export default function Home() {
               </div>
             </div>
           </div>
-        ))}
+        );
+        })}
       </div>
     </div>
   );
