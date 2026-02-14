@@ -29,6 +29,19 @@ export default function Home() {
   const [error, setError] = useState<string>('');
   const [pdfWorkerReady, setPdfWorkerReady] = useState(false);
   const [manualRotation, setManualRotation] = useState<{ [key: number]: number }>({});
+  const [showMapping, setShowMapping] = useState(false);
+  const [columnMapping, setColumnMapping] = useState<{ [key: string]: string }>({});
+  const [mappedData, setMappedData] = useState<string[][] | null>(null);
+
+  // Predefined columns for mapping
+  const predefinedColumns = [
+    'Sr. No',
+    'Category',
+    'RFP Document Reference (Page & Section)',
+    'Content of RFP Requiring Clarification',
+    'Points of Clarification (Bidder Query)',
+    'Response (SRA)'
+  ];
 
   const rotatePageManually = async (pageIndex: number, angle: number) => {
     const result = pageResults[pageIndex];
@@ -85,6 +98,75 @@ export default function Home() {
     const a = document.createElement('a');
     a.href = url;
     a.download = 'all_tables.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleColumnMapping = (predefinedCol: string, extractedCol: string) => {
+    const newMapping = {
+      ...columnMapping,
+      [predefinedCol]: extractedCol
+    };
+    setColumnMapping(newMapping);
+    
+    // Auto-apply mapping when any column is mapped
+    applyMappingWithData(newMapping);
+  };
+
+  const applyMappingWithData = (mapping: { [key: string]: string }) => {
+    const firstTable = pageResults.find(r => r.tableData.isTable && r.tableData.rows);
+    if (!firstTable || !firstTable.tableData.rows || firstTable.tableData.rows.length < 2) return;
+
+    // Skip first row, use second row as headers
+    const extractedHeaders = firstTable.tableData.rows[1];
+    const dataRows = firstTable.tableData.rows.slice(2); // Start from 3rd row
+
+    // Create mapped data with predefined column order
+    const mapped: string[][] = [];
+    
+    // Add header row with predefined columns
+    mapped.push(predefinedColumns);
+
+    // Map each data row
+    for (const row of dataRows) {
+      const mappedRow: string[] = [];
+      
+      for (const predefinedCol of predefinedColumns) {
+        const extractedCol = mapping[predefinedCol];
+        if (extractedCol) {
+          const colIndex = extractedHeaders.indexOf(extractedCol);
+          if (colIndex !== -1 && colIndex < row.length) {
+            mappedRow.push(row[colIndex]);
+          } else {
+            mappedRow.push('');
+          }
+        } else {
+          mappedRow.push('');
+        }
+      }
+      
+      mapped.push(mappedRow);
+    }
+
+    setMappedData(mapped);
+  };
+
+  const applyMapping = () => {
+    applyMappingWithData(columnMapping);
+  };
+
+  const exportMappedData = () => {
+    if (!mappedData) return;
+    
+    const csv = mappedData.map(row => 
+      row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')
+    ).join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mapped_data.csv';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -962,15 +1044,137 @@ export default function Home() {
               <h2 className="text-xl font-semibold text-gray-800">
                 Extracted {pageResults.length} page{pageResults.length > 1 ? 's' : ''}
               </h2>
-              {pageResults.some(r => r.tableData.isTable) && (
+              <div className="flex gap-3">
+                {pageResults.some(r => r.tableData.isTable) && (
+                  <>
+                    <button
+                      onClick={() => setShowMapping(!showMapping)}
+                      className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      {showMapping ? 'Hide Mapping' : 'Map Columns'}
+                    </button>
+                    <button
+                      onClick={exportAllToCSV}
+                      className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      Export All to CSV
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showMapping && pageResults.length > 0 && pageResults.some(r => r.tableData.isTable && r.tableData.rows) && (
+          <div className="bg-white rounded-lg shadow-xl p-6 mb-8">
+            <h2 className="text-2xl font-bold mb-6 text-indigo-900">Column Mapping</h2>
+            
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3 text-gray-900">
+                Extracted Columns (from row 2 of first table):
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {pageResults.find(r => r.tableData.isTable && r.tableData.rows)?.tableData.rows?.[1]?.map((col, idx) => (
+                  <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-900 rounded-full text-sm font-medium">
+                    {col || `Column ${idx + 1}`}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3 text-gray-900">
+                Map to Predefined Columns:
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {predefinedColumns.map((predefinedCol) => {
+                  const extractedHeaders = pageResults.find(r => r.tableData.isTable && r.tableData.rows)?.tableData.rows?.[1] || [];
+                  return (
+                    <div key={predefinedCol} className="flex items-center gap-3">
+                      <label className="w-32 text-sm font-semibold text-gray-900">
+                        {predefinedCol}:
+                      </label>
+                      <select
+                        value={columnMapping[predefinedCol] || ''}
+                        onChange={(e) => handleColumnMapping(predefinedCol, e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 font-medium"
+                      >
+                        <option value="">-- Select Column --</option>
+                        {extractedHeaders.map((col, idx) => (
+                          <option key={idx} value={col}>
+                            {col || `Column ${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={applyMapping}
+                className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Refresh Mapping
+              </button>
+              {mappedData && (
                 <button
-                  onClick={exportAllToCSV}
+                  onClick={exportMappedData}
                   className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
                 >
-                  Export All to CSV
+                  Download Excel
                 </button>
               )}
             </div>
+
+            {mappedData && (
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Mapped Data (Excel Preview):
+                  </h3>
+                  <span className="text-sm text-gray-600">
+                    {mappedData.length - 1} rows × {mappedData[0].length} columns
+                  </span>
+                </div>
+                <div className="bg-white rounded-lg border-2 border-gray-300 overflow-auto max-h-[600px]">
+                  <table className="min-w-full border-collapse">
+                    <thead className="sticky top-0 bg-green-600 text-white">
+                      <tr>
+                        {mappedData[0].map((header, idx) => (
+                          <th
+                            key={idx}
+                            className="border border-gray-400 px-4 py-3 text-left text-sm font-bold"
+                          >
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mappedData.slice(1).map((row, rowIndex) => (
+                        <tr 
+                          key={rowIndex} 
+                          className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                        >
+                          {row.map((cell, cellIndex) => (
+                            <td
+                              key={cellIndex}
+                              className="border border-gray-300 px-4 py-2 text-sm text-gray-900"
+                            >
+                              {cell || '-'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
