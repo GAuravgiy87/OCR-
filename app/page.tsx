@@ -32,6 +32,8 @@ export default function Home() {
   const [showMapping, setShowMapping] = useState(false);
   const [columnMapping, setColumnMapping] = useState<{ [key: string]: string }>({});
   const [mappedData, setMappedData] = useState<string[][] | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editedData, setEditedData] = useState<{ [pageIndex: number]: string[][] }>({});
 
   // Predefined columns for mapping
   const predefinedColumns = [
@@ -117,9 +119,13 @@ export default function Home() {
     const firstTable = pageResults.find(r => r.tableData.isTable && r.tableData.rows);
     if (!firstTable || !firstTable.tableData.rows || firstTable.tableData.rows.length < 2) return;
 
+    // Get edited data if available, otherwise use original
+    const pageIndex = pageResults.indexOf(firstTable);
+    const tableRows = editedData[pageIndex] || firstTable.tableData.rows;
+
     // Skip first row, use second row as headers
-    const extractedHeaders = firstTable.tableData.rows[1];
-    const dataRows = firstTable.tableData.rows.slice(2); // Start from 3rd row
+    const extractedHeaders = tableRows[1];
+    const dataRows = tableRows.slice(2); // Start from 3rd row
 
     // Create mapped data with predefined column order
     const mapped: string[][] = [];
@@ -149,6 +155,34 @@ export default function Home() {
     }
 
     setMappedData(mapped);
+  };
+
+  const handleCellEdit = (pageIndex: number, rowIndex: number, colIndex: number, value: string) => {
+    const result = pageResults[pageIndex];
+    if (!result || !result.tableData.rows) return;
+
+    // Get current data (edited or original)
+    const currentData = editedData[pageIndex] || result.tableData.rows;
+    
+    // Create a copy and update the cell
+    const newData = currentData.map((row, rIdx) => 
+      rIdx === rowIndex ? row.map((cell, cIdx) => cIdx === colIndex ? value : cell) : [...row]
+    );
+
+    // Update edited data
+    setEditedData(prev => ({
+      ...prev,
+      [pageIndex]: newData
+    }));
+
+    // Re-apply mapping if mapping is active
+    if (showMapping) {
+      applyMappingWithData(columnMapping);
+    }
+  };
+
+  const toggleEditMode = () => {
+    setEditMode(!editMode);
   };
 
   const applyMapping = () => {
@@ -1075,11 +1109,17 @@ export default function Home() {
                 Extracted Columns (from row 2 of first table):
               </h3>
               <div className="flex flex-wrap gap-2">
-                {pageResults.find(r => r.tableData.isTable && r.tableData.rows)?.tableData.rows?.[1]?.map((col, idx) => (
-                  <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-900 rounded-full text-sm font-medium">
-                    {col || `Column ${idx + 1}`}
-                  </span>
-                ))}
+                {(() => {
+                  const firstTable = pageResults.find(r => r.tableData.isTable && r.tableData.rows);
+                  if (!firstTable) return null;
+                  const pageIndex = pageResults.indexOf(firstTable);
+                  const tableRows = editedData[pageIndex] || firstTable.tableData.rows;
+                  return tableRows?.[1]?.map((col, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-900 rounded-full text-sm font-medium">
+                      {col || `Column ${idx + 1}`}
+                    </span>
+                  ));
+                })()}
               </div>
             </div>
 
@@ -1089,7 +1129,11 @@ export default function Home() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {predefinedColumns.map((predefinedCol) => {
-                  const extractedHeaders = pageResults.find(r => r.tableData.isTable && r.tableData.rows)?.tableData.rows?.[1] || [];
+                  const firstTable = pageResults.find(r => r.tableData.isTable && r.tableData.rows);
+                  if (!firstTable) return null;
+                  const pageIndex = pageResults.indexOf(firstTable);
+                  const tableRows = editedData[pageIndex] || firstTable.tableData.rows;
+                  const extractedHeaders = tableRows?.[1] || [];
                   return (
                     <div key={predefinedCol} className="flex items-center gap-3">
                       <label className="w-32 text-sm font-semibold text-gray-900">
@@ -1232,45 +1276,72 @@ export default function Home() {
               </div>
 
               <div>
-                <h3 className="text-xl font-semibold mb-4 text-gray-800">
-                  Extracted Table Data
-                </h3>
-                {result.tableData.isTable && result.tableData.rows && (
-                  <button
-                    onClick={() => exportToCSV(result.tableData, result.pageNumber)}
-                    className="mb-4 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    Export to CSV
-                  </button>
-                )}
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-semibold text-gray-800">
+                    Extracted Table Data
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={toggleEditMode}
+                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        editMode 
+                          ? 'bg-red-600 text-white hover:bg-red-700' 
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {editMode ? 'Done Editing' : 'Edit Table'}
+                    </button>
+                    {result.tableData.isTable && result.tableData.rows && (
+                      <button
+                        onClick={() => exportToCSV(result.tableData, result.pageNumber)}
+                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        Export to CSV
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-[800px]">
                   {result.tableData.isTable && result.tableData.rows ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full border-collapse border-2 border-gray-600">
                         <tbody>
-                          {result.tableData.rows.map((row, rowIndex) => (
-                            <tr 
-                              key={rowIndex} 
-                              className={
-                                rowIndex === 0 
-                                  ? 'bg-indigo-200 font-bold' 
-                                  : rowIndex % 2 === 1 
-                                  ? 'bg-white' 
-                                  : 'bg-gray-100'
-                              }
-                            >
-                              {row.map((cell, cellIndex) => (
-                                <td
-                                  key={cellIndex}
-                                  className="border border-gray-400 px-3 py-2 text-xs text-gray-900 align-top"
-                                >
-                                  <div className="min-h-[20px]">
-                                    {cell || ''}
-                                  </div>
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
+                          {(() => {
+                            const tableRows = editedData[index] || result.tableData.rows;
+                            // Skip first row, start from second row
+                            return tableRows.slice(1).map((row, rowIndex) => (
+                              <tr 
+                                key={rowIndex} 
+                                className={
+                                  rowIndex === 0 
+                                    ? 'bg-indigo-200 font-bold' 
+                                    : rowIndex % 2 === 0
+                                    ? 'bg-white' 
+                                    : 'bg-gray-100'
+                                }
+                              >
+                                {row.map((cell, cellIndex) => (
+                                  <td
+                                    key={cellIndex}
+                                    className="border border-gray-400 px-3 py-2 text-xs text-gray-900 align-top"
+                                  >
+                                    {editMode ? (
+                                      <input
+                                        type="text"
+                                        value={cell}
+                                        onChange={(e) => handleCellEdit(index, rowIndex + 1, cellIndex, e.target.value)}
+                                        className="w-full min-w-[100px] px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      />
+                                    ) : (
+                                      <div className="min-h-[20px]">
+                                        {cell || ''}
+                                      </div>
+                                    )}
+                                  </td>
+                                ))}
+                              </tr>
+                            ));
+                          })()}
                         </tbody>
                       </table>
                     </div>
