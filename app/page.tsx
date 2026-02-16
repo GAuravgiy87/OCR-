@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { createWorker } from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
+import { indexExtractedResults } from '../lib/indexing';
+import ChatWithDocument from '../components/ChatWithDocument';
 
 interface TableData {
   isTable: boolean;
@@ -1137,10 +1139,10 @@ export default function Home() {
       const fileType = uploadedFile.type;
 
       if (fileType === 'application/pdf') {
-        const results = await processPDF(uploadedFile);
+      const results = await processPDF(uploadedFile);
         setPageResults(results);
+        await indexExtractedResults(results); // add this line
         setLoading(false);
-      } else {
         // Process as image
         setTotalPages(1);
         const reader = new FileReader();
@@ -1368,6 +1370,13 @@ export default function Home() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {pageResults.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold mb-4">Ask about this document</h2>
+            <ChatWithDocument />
           </div>
         )}
 
