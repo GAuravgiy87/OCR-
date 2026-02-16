@@ -36,6 +36,7 @@ export default function Home() {
   const [editedData, setEditedData] = useState<{ [pageIndex: number]: string[][] }>({});
   const [isDragging, setIsDragging] = useState(false);
   const [currentPageView, setCurrentPageView] = useState(0);
+  const [isRotating, setIsRotating] = useState(false);
 
   // Predefined columns for mapping
   const predefinedColumns = [
@@ -50,23 +51,119 @@ export default function Home() {
   const rotatePageManually = async (pageIndex: number, angle: number) => {
     const result = pageResults[pageIndex];
     if (!result) return;
-
-    const currentRotation = manualRotation[pageIndex] || 0;
-    const newRotation = (currentRotation + angle) % 360;
     
-    setManualRotation(prev => ({ ...prev, [pageIndex]: newRotation }));
+    // Prevent multiple simultaneous rotations
+    if (isRotating) {
+      console.log('Rotation already in progress, ignoring click');
+      return;
+    }
 
-    // Rotate the original image
-    const rotated = await rotateImage(result.originalImage, angle);
-    
-    // Update the result
-    const updatedResults = [...pageResults];
-    updatedResults[pageIndex] = {
-      ...result,
-      originalImage: rotated,
-      rotationApplied: (result.rotationApplied || 0) + angle
-    };
-    setPageResults(updatedResults);
+    try {
+      setIsRotating(true);
+      console.log(`Rotating page ${result.pageNumber} by ${angle} degrees...`);
+      
+      const currentRotation = manualRotation[pageIndex] || 0;
+      const newRotation = (currentRotation + angle) % 360;
+      
+      setManualRotation(prev => ({ ...prev, [pageIndex]: newRotation }));
+
+      // Step 1: Rotate the original image FIRST and show it immediately
+      const rotated = await rotateImage(result.originalImage, angle);
+      
+      // Update the display immediately with rotated image
+      const updatedResultsTemp = [...pageResults];
+      updatedResultsTemp[pageIndex] = {
+        ...result,
+        originalImage: rotated,
+        rotationApplied: (result.rotationApplied || 0) + angle
+      };
+      setPageResults(updatedResultsTemp);
+      
+      console.log('Image rotated, now reprocessing table data...');
+
+      // Step 2: Now show loading and reprocess the table data
+      setLoading(true);
+      setProgress(0);
+
+      // Create a temporary worker for reprocessing
+      const worker = await createWorker('eng', 1, {
+        langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            setProgress(Math.round(m.progress * 100));
+          }
+        },
+      });
+      
+      await worker.setParameters({
+        preserve_interword_spaces: '1',
+      });
+
+      // Process the rotated image
+      const quality = await analyzeImageQuality(rotated);
+      const enhanced = await enhanceImageAdaptive(rotated, quality);
+      const { rowBoundaries, colBoundaries, tableRegion } = await detectTableStructure(enhanced);
+      
+      let newTableData: TableData;
+      let newProcessedImage = rotated;
+
+      if (rowBoundaries.length >= 2 && colBoundaries.length >= 2 && tableRegion) {
+        const maskedImage = await maskOutsideTable(enhanced, tableRegion);
+        const tableRows = await extractCellData(maskedImage, rowBoundaries, colBoundaries, worker, quality, tableRegion);
+        const cleanedTableRows = findHeaderRowAndClean(tableRows);
+        
+        newTableData = { isTable: true, rows: cleanedTableRows, pageNumber: result.pageNumber };
+        newProcessedImage = await cropToTableRegion(maskedImage, tableRegion);
+        
+        console.log(`Table reprocessed: ${cleanedTableRows.length} rows extracted`);
+      } else {
+        // Fallback to full page OCR
+        console.log('No table detected, using full page OCR');
+        const { data } = await worker.recognize(enhanced, {
+          tessedit_pageseg_mode: '1',
+          tessedit_ocr_engine_mode: '1',
+          preserve_interword_spaces: '1',
+        } as any);
+        let text = data.text
+          .replace(/[|]/g, 'I')
+          .replace(/[`´']/g, "'")
+          .replace(/[""]/g, '"')
+          .trim();
+        
+        newTableData = { isTable: false, text, pageNumber: result.pageNumber };
+      }
+
+      await worker.terminate();
+
+      // Step 3: Update with new table data
+      const updatedResults = [...pageResults];
+      updatedResults[pageIndex] = {
+        ...result,
+        originalImage: rotated,
+        processedImage: newProcessedImage,
+        tableData: newTableData,
+        rotationApplied: (result.rotationApplied || 0) + angle
+      };
+      setPageResults(updatedResults);
+
+      // Clear edited data for this page since we have new data
+      setEditedData(prev => {
+        const newData = { ...prev };
+        delete newData[pageIndex];
+        return newData;
+      });
+
+      console.log(`Page ${result.pageNumber} rotation complete!`);
+      setLoading(false);
+      setProgress(0);
+      setIsRotating(false);
+    } catch (error) {
+      console.error('Error during manual rotation:', error);
+      setError(`Failed to reprocess rotated image: ${error}`);
+      setLoading(false);
+      setProgress(0);
+      setIsRotating(false);
+    }
   };
 
 
@@ -111,9 +208,9 @@ export default function Home() {
     const pageIndex = pageResults.indexOf(firstTable);
     const tableRows = editedData[pageIndex] || firstTable.tableData.rows;
 
-    // Skip first row, use second row as headers
-    const extractedHeaders = tableRows[1];
-    const dataRows = tableRows.slice(2); // Start from 3rd row
+    // Use first row as headers (Sr. No row)
+    const extractedHeaders = tableRows[0];
+    const dataRows = tableRows.slice(1); // Start from 2nd row
 
     // Create mapped data with predefined column order
     const mapped: string[][] = [];
@@ -797,6 +894,55 @@ export default function Home() {
     return tableData;
   };
 
+  const findHeaderRowAndClean = (tableData: string[][]): string[][] => {
+    if (tableData.length === 0) return tableData;
+
+    // Keywords that indicate a header row
+    const headerKeywords = [
+      'sr. no', 'sr.no', 'sr no', 'serial', 's.no', 's. no',
+      'category', 'reference', 'clarification', 'query', 'response',
+      'rfp', 'document', 'page', 'section'
+    ];
+
+    // Find the first row that contains header keywords
+    let headerRowIndex = -1;
+    
+    for (let i = 0; i < tableData.length; i++) {
+      const row = tableData[i];
+      const rowText = row.join(' ').toLowerCase();
+      
+      // Check if this row contains any header keywords
+      const hasHeaderKeyword = headerKeywords.some(keyword => 
+        rowText.includes(keyword)
+      );
+      
+      // Also check if first cell looks like "Sr. No" or similar
+      const firstCell = row[0]?.toLowerCase().trim() || '';
+      const isSerialNumberHeader = 
+        firstCell.includes('sr') || 
+        firstCell.includes('s.') ||
+        firstCell.includes('serial') ||
+        firstCell === 'no' ||
+        firstCell === 'no.';
+      
+      if (hasHeaderKeyword || isSerialNumberHeader) {
+        headerRowIndex = i;
+        console.log(`Found header row at index ${i}:`, row);
+        break;
+      }
+    }
+
+    // If header row found, remove all rows before it
+    if (headerRowIndex > 0) {
+      console.log(`Removing ${headerRowIndex} rows before header row`);
+      return tableData.slice(headerRowIndex);
+    }
+
+    // If no header found, return original data
+    console.log('No header row detected, keeping all rows');
+    return tableData;
+  };
+
   const processImage = async (imageData: string, pageNum: number, worker: any): Promise<PageResult> => {
     try {
       console.log(`Processing page ${pageNum}...`);
@@ -805,20 +951,19 @@ export default function Home() {
       console.log(`Upscaling page ${pageNum} for better OCR...`);
       const upscaled = await upscaleImage(imageData, 2);
       
-      // FORCE: Rotate 90 degrees clockwise FIRST
-      console.log(`Force rotating page ${pageNum} by 90 degrees clockwise`);
-      let rotatedImage = await rotateImage(upscaled, 90);
-      let totalRotation = 90;
+      // Step 1: Detect if rotation is needed
+      const detectedRotation = await detectRotation(upscaled);
       
-      // Step 1: Detect if additional rotation is needed
-      const additionalRotation = await detectRotation(rotatedImage);
+      // Step 2: Apply rotation if detected
+      let correctedImage = upscaled;
+      let totalRotation = 0;
       
-      // Step 2: Apply additional rotation if detected
-      let correctedImage = rotatedImage;
-      if (additionalRotation !== 0) {
-        console.log(`Applying additional rotation of ${additionalRotation} degrees`);
-        correctedImage = await rotateImage(rotatedImage, additionalRotation);
-        totalRotation += additionalRotation;
+      if (detectedRotation !== 0) {
+        console.log(`Applying detected rotation of ${detectedRotation} degrees`);
+        correctedImage = await rotateImage(upscaled, detectedRotation);
+        totalRotation = detectedRotation;
+      } else {
+        console.log(`No rotation needed for page ${pageNum}`);
       }
 
       // Step 3: Analyze image quality
@@ -850,7 +995,12 @@ export default function Home() {
         // Extract cells from masked image
         console.log(`Extracting table data from page ${pageNum}...`);
         const tableRows = await extractCellData(maskedImage, rowBoundaries, colBoundaries, worker, quality, tableRegion);
-        tableData = { isTable: true, rows: tableRows, pageNumber: pageNum };
+        
+        // Find header row (Sr. No) and remove all rows before it
+        const cleanedTableRows = findHeaderRowAndClean(tableRows);
+        console.log(`After cleaning: Table has ${cleanedTableRows.length} rows (including header)`);
+        
+        tableData = { isTable: true, rows: cleanedTableRows, pageNumber: pageNum };
         
         // Show cropped table as processed image
         const croppedTable = await cropToTableRegion(maskedImage, tableRegion);
@@ -1247,7 +1397,7 @@ export default function Home() {
                   if (!firstTable) return null;
                   const pageIndex = pageResults.indexOf(firstTable);
                   const tableRows = editedData[pageIndex] || firstTable.tableData.rows;
-                  const extractedHeaders = tableRows?.[1] || [];
+                  const extractedHeaders = tableRows?.[0] || [];
                   return (
                     <div key={predefinedCol} className="flex flex-col gap-2">
                       <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">
@@ -1432,20 +1582,46 @@ export default function Home() {
                   </p>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <button
-                  onClick={() => rotatePageManually(actualIndex, 90)}
-                  className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  title="Rotate 90° clockwise"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    rotatePageManually(actualIndex, 90);
+                  }}
+                  disabled={loading}
+                  className={`group px-5 py-2.5 text-sm font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-md ${
+                    loading 
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                      : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0'
+                  }`}
+                  title="Rotate 90° clockwise and reprocess table"
                 >
-                  ↻ 90°
+                  <svg className={`w-5 h-5 ${loading ? '' : 'group-hover:rotate-90 transition-transform duration-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Rotate Right</span>
                 </button>
                 <button
-                  onClick={() => rotatePageManually(actualIndex, -90)}
-                  className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  title="Rotate 90° counter-clockwise"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    rotatePageManually(actualIndex, -90);
+                  }}
+                  disabled={loading}
+                  className={`group px-5 py-2.5 text-sm font-bold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-md ${
+                    loading 
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                      : 'bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:from-purple-600 hover:to-pink-700 hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0'
+                  }`}
+                  title="Rotate 90° counter-clockwise and reprocess table"
                 >
-                  ↺ 90°
+                  <svg className={`w-5 h-5 ${loading ? '' : 'group-hover:-rotate-90 transition-transform duration-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Rotate Left</span>
                 </button>
               </div>
             </div>
@@ -1463,19 +1639,6 @@ export default function Home() {
                     src={result.originalImage}
                     alt={`Page ${result.pageNumber} Original`}
                     className="w-full h-auto rounded-lg border-2 border-blue-300 shadow-md hover:shadow-lg transition-shadow"
-                  />
-                </div>
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
-                  <h3 className="text-lg font-bold mb-3 text-gray-800 flex items-center gap-2">
-                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                    </svg>
-                    Processed Image
-                  </h3>
-                  <img
-                    src={result.processedImage}
-                    alt={`Page ${result.pageNumber} Processed`}
-                    className="w-full h-auto rounded-lg border-2 border-purple-300 shadow-md hover:shadow-lg transition-shadow"
                   />
                 </div>
               </div>
@@ -1513,8 +1676,8 @@ export default function Home() {
                         <tbody>
                           {(() => {
                             const tableRows = editedData[actualIndex] || result.tableData.rows;
-                            // Skip first row, start from second row
-                            return tableRows.slice(1).map((row, rowIndex) => (
+                            // Display all rows (first row is now the header with Sr. No)
+                            return tableRows.map((row, rowIndex) => (
                               <tr 
                                 key={rowIndex} 
                                 className={
@@ -1536,7 +1699,7 @@ export default function Home() {
                                       <input
                                         type="text"
                                         value={cell}
-                                        onChange={(e) => handleCellEdit(actualIndex, rowIndex + 1, cellIndex, e.target.value)}
+                                        onChange={(e) => handleCellEdit(actualIndex, rowIndex, cellIndex, e.target.value)}
                                         className="w-full min-w-[100px] px-2 py-1.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 hover:border-indigo-400 transition-colors"
                                       />
                                     ) : (
