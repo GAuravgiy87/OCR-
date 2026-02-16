@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createWorker } from 'tesseract.js';
-import * as pdfjsLib from 'pdfjs-dist';
+import type * as pdfjsLibType from 'pdfjs-dist';
 
 interface TableData {
   isTable: boolean;
@@ -291,17 +291,22 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // Initialize PDF.js worker
+    // Initialize PDF.js worker - dynamic import to avoid SSR issues
     if (typeof window !== 'undefined') {
-      try {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-        setPdfWorkerReady(true);
-      } catch (err) {
-        console.error('Failed to set PDF worker:', err);
-        // Fallback to CDN
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-        setPdfWorkerReady(true);
-      }
+      import('pdfjs-dist').then((pdfjsLib) => {
+        try {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+          setPdfWorkerReady(true);
+        } catch (err) {
+          console.error('Failed to set PDF worker:', err);
+          // Fallback to CDN
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+          setPdfWorkerReady(true);
+        }
+      }).catch(err => {
+        console.error('Failed to load PDF.js:', err);
+        setError('Failed to initialize PDF support');
+      });
     }
   }, []);
 
@@ -1057,6 +1062,7 @@ export default function Home() {
 
   const processPDF = async (file: File) => {
     try {
+      const pdfjsLib = await import('pdfjs-dist');
       const arrayBuffer = await file.arrayBuffer();
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
       const pdf = await loadingTask.promise;
