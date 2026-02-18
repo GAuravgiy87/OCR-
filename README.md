@@ -43,7 +43,7 @@
 - 📄 **Multi-Page** - Process entire PDF documents
 - 🎭 **Manual Rotation** - Fine-tune orientation
 - 💾 **Batch Export** - Export all pages at once
-- 🤖 **AI Error Correction** - Gemini AI fixes OCR mistakes
+- 🤖 **AI Error Correction** - DeepSeek AI chat assistant
 
 </td>
 </tr>
@@ -75,22 +75,24 @@ cd ocr-app
 # Install dependencies
 npm install
 
-# Set up environment variables (for AI correction)
+# Set up environment variables (for AI chat)
 cp .env.local.example .env.local
-# Edit .env.local and add your Google Gemini API key
+# Edit .env.local and add your DeepSeek API key
 
 # Run development server
 npm run dev
 ```
 
-### 🔑 Getting Google Gemini API Key
+### 🔑 Getting DeepSeek API Key
 
-1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Sign in with your Google account
-3. Click "Create API Key"
-4. Copy the key and paste it in `.env.local`:
+1. Visit [DeepSeek Platform](https://platform.deepseek.com/)
+2. Sign up or log in to your account
+3. Navigate to API Keys section
+4. Create a new API key
+5. Copy the key and paste it in `.env.local`:
    ```
-   NEXT_PUBLIC_GOOGLE_API_KEY=your_api_key_here
+   DEEPSEEK_API_KEY=your_api_key_here
+   NEXT_PUBLIC_DEEPSEEK_API_KEY=your_api_key_here
    ```
 
 <div align="center">

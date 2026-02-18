@@ -1,47 +1,70 @@
-// app/api/chat/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { searchSimilar } from "@/lib/vectorStore";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextRequest, NextResponse } from 'next/server';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const { query } = await req.json();
-    if (!query) {
-      return NextResponse.json({ error: "No query provided" }, { status: 400 });
+    const body = await request.json();
+    const { question, context } = body;
+
+    if (!question) {
+      return NextResponse.json({ error: 'Question is required' }, { status: 400 });
     }
 
-    // 1. Retrieve relevant documents
-    const relevantDocs = await searchSimilar(query, 5);
-    const context = relevantDocs.map((doc) => doc.pageContent).join("\n\n");
+    // Get DeepSeek API key
+    const apiKey = process.env.DEEPSEEK_API_KEY || process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      console.error('DeepSeek API key not found');
+      return NextResponse.json({ error: 'AI not configured' }, { status: 503 });
+    }
 
-    // 2. Build prompt
-    const prompt = `
-You are a helpful assistant that answers questions based on the provided context from a document.
+    console.log('Sending question to DeepSeek...');
+    
+    // Use DeepSeek API (OpenAI-compatible)
+    const response = await fetch(
+      'https://api.deepseek.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a helpful assistant that answers questions about extracted table data from documents. Provide clear, concise answers based on the data provided. When asked which file a table is from, look at the "From Document" field in the context.'
+            },
+            {
+              role: 'user',
+              content: `Database Context:\n${context}\n\nUser Question: ${question}`
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 1500
+        })
+      }
+    );
 
-Context:
-${context}
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('DeepSeek API error:', errorData);
+      return NextResponse.json({ 
+        error: 'Failed to get AI response', 
+        details: errorData.error?.message || 'Unknown error'
+      }, { status: response.status });
+    }
 
-Question: ${query}
+    const data = await response.json();
+    const answer = data.choices?.[0]?.message?.content || 'No response generated';
 
-Answer the question concisely based only on the context. If the context doesn't contain the answer, say "I couldn't find information about that in the document."
-`;
+    console.log('Received answer from DeepSeek');
+    return NextResponse.json({ answer });
 
-    // 3. Generate answer with Gemini
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // or "gemini-pro"
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
-
-    return NextResponse.json({
-      answer: response,
-      sources: relevantDocs.map((doc) => ({
-        pageContent: doc.pageContent.substring(0, 200) + "...",
-        metadata: doc.metadata,
-      })),
-    });
-  } catch (error) {
-    console.error("Chat API error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } catch (error: any) {
+    console.error('Chat API error:', error);
+    return NextResponse.json({ 
+      error: 'Failed to get answer', 
+      details: error.message 
+    }, { status: 500 });
   }
 }

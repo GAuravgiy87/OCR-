@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import ChatSidebar from "../components/ChatSidebar";
 
 export const metadata: Metadata = {
-  title: "Image Text Extractor",
-  description: "Extract text from images with OCR",
+  title: "OCR App - Document Table Extraction with AI Chat",
+  description: "Extract tables from PDFs and images with AI-powered OCR and chat assistant",
 };
 
 export default function RootLayout({
@@ -13,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ChatSidebar />
+      </body>
     </html>
   );
 }

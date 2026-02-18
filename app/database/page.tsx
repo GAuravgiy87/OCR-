@@ -117,30 +117,50 @@ export default function DatabaseViewer() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Page ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Table ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Document</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Page</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rows</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Columns</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {tables.map((table) => (
-                  <tr key={table.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{table.id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{table.pageId}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{table.rowCount}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{table.columnCount}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <button
-                        onClick={() => setSelectedTable(table)}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        View Data
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {tables.map((table) => {
+                  // Find the page and document for this table
+                  const pages = JSON.parse(localStorage.getItem('pages') || '[]');
+                  const page = pages.find((p: any) => p.id === table.pageId);
+                  const document = page ? documents.find(d => d.id === page.documentId) : null;
+                  
+                  return (
+                    <tr key={table.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{table.id}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {document ? (
+                          <div>
+                            <div className="font-medium">{document.filename}</div>
+                            <div className="text-xs text-gray-500">Doc ID: {document.id}</div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">Unknown</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {page ? `Page ${page.pageNumber}` : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{table.rowCount}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{table.columnCount}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => setSelectedTable(table)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          View Data
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {tables.length === 0 && (
