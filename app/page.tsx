@@ -24,6 +24,7 @@ interface PageResult {
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [pageResults, setPageResults] = useState<PageResult[]>([]);
+  const [allPages, setAllPages] = useState<PageResult[]>([]); // Store all original pages
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
@@ -55,8 +56,7 @@ export default function Home() {
   ];
 
   const rotatePageManually = async (pageIndex: number, angle: number) => {
-    const result = pageResults[pageIndex];
-    if (!result) return;
+    if (allPages.length === 0) return;
     
     // Prevent multiple simultaneous rotations
     if (isRotating) {
@@ -66,32 +66,28 @@ export default function Home() {
 
     try {
       setIsRotating(true);
-      console.log(`Rotating page ${result.pageNumber} by ${angle} degrees...`);
+      console.log(`Rotating ALL pages by ${angle} degrees...`);
       
-      const currentRotation = manualRotation[pageIndex] || 0;
-      const newRotation = (currentRotation + angle) % 360;
+      // Rotate ALL pages from allPages, not pageResults
+      const rotatedResults = await Promise.all(
+        allPages.map(async (pageResult) => {
+          const rotated = await rotateImage(pageResult.originalImage, angle);
+          return {
+            ...pageResult,
+            originalImage: rotated,
+            rotationApplied: (pageResult.rotationApplied || 0) + angle
+          };
+        })
+      );
       
-      setManualRotation(prev => ({ ...prev, [pageIndex]: newRotation }));
-
-      // Step 1: Rotate the original image FIRST and show it immediately
-      const rotated = await rotateImage(result.originalImage, angle);
+      // Update allPages display immediately
+      setAllPages(rotatedResults);
       
-      // Update the display immediately with rotated image
-      const updatedResultsTemp = [...pageResults];
-      updatedResultsTemp[pageIndex] = {
-        ...result,
-        originalImage: rotated,
-        rotationApplied: (result.rotationApplied || 0) + angle
-      };
-      setPageResults(updatedResultsTemp);
-      
-      console.log('Image rotated, now reprocessing table data...');
-
-      // Step 2: Now show loading and reprocess the table data
+      console.log('All images rotated, now reprocessing table data...');
       setLoading(true);
       setProgress(0);
 
-      // Create a temporary worker for reprocessing
+      // Reprocess all pages with the rotation
       const worker = await createWorker('eng', 1, {
         langPath: 'https://tessdata.projectnaptha.com/4.0.0',
         logger: (m) => {
@@ -105,74 +101,98 @@ export default function Home() {
         preserve_interword_spaces: '1',
       });
 
-      // Process the rotated image
-      const quality = await analyzeImageQuality(rotated);
-      const enhanced = await enhanceImageAdaptive(rotated, quality);
-      const { rowBoundaries, colBoundaries, tableRegion } = await detectTableStructure(enhanced);
-      
-      let newTableData: TableData;
-      let newProcessedImage = rotated;
+      let firstPageStructure: { rowBoundaries: number[], colBoundaries: number[], tableRegion: any } | null = null;
+      const reprocessedResults: PageResult[] = [];
 
-      if (rowBoundaries.length >= 2 && colBoundaries.length >= 2 && tableRegion) {
-        const maskedImage = await maskOutsideTable(enhanced, tableRegion);
-        const tableRows = await extractCellData(maskedImage, rowBoundaries, colBoundaries, worker, quality, tableRegion);
-        let cleanedTableRows = findHeaderRowAndClean(tableRows);
+      for (let i = 0; i < rotatedResults.length; i++) {
+        const rotatedResult = rotatedResults[i];
         
-        newTableData = { isTable: true, rows: cleanedTableRows, pageNumber: result.pageNumber };
-        newProcessedImage = await cropToTableRegion(maskedImage, tableRegion);
-        
-        console.log(`Table reprocessed: ${cleanedTableRows.length} rows extracted`);
-      } else {
-        // Fallback to full page OCR
-        console.log('No table detected, using full page OCR');
-        const { data } = await worker.recognize(enhanced, {
-          tessedit_pageseg_mode: '1',
-          tessedit_ocr_engine_mode: '1',
-          preserve_interword_spaces: '1',
-        } as any);
-        let text = data.text
-          .replace(/[|]/g, 'I')
-          .replace(/[`´']/g, "'")
-          .replace(/[""]/g, '"')
-          .trim();
-        
-        newTableData = { isTable: false, text, pageNumber: result.pageNumber };
+        if (i === 0) {
+          // Process first page normally to get structure
+          const quality = await analyzeImageQuality(rotatedResult.originalImage);
+          const enhanced = await enhanceImageAdaptive(rotatedResult.originalImage, quality);
+          const { rowBoundaries, colBoundaries, tableRegion } = await detectTableStructure(enhanced);
+          
+          let newTableData: TableData;
+          let newProcessedImage = rotatedResult.originalImage;
+
+          if (rowBoundaries.length >= 2 && colBoundaries.length >= 2 && tableRegion) {
+            const maskedImage = await maskOutsideTable(enhanced, tableRegion);
+            const tableRows = await extractCellData(maskedImage, rowBoundaries, colBoundaries, worker, quality, tableRegion);
+            let cleanedTableRows = findHeaderRowAndClean(tableRows);
+            
+            newTableData = { isTable: true, rows: cleanedTableRows, pageNumber: rotatedResult.pageNumber };
+            newProcessedImage = await cropToTableRegion(maskedImage, tableRegion);
+            
+            // Save structure for other pages
+            firstPageStructure = { rowBoundaries, colBoundaries, tableRegion };
+            console.log(`First page reprocessed: ${cleanedTableRows.length} rows extracted`);
+          } else {
+            const { data } = await worker.recognize(enhanced, {
+              tessedit_pageseg_mode: '1',
+              tessedit_ocr_engine_mode: '1',
+              preserve_interword_spaces: '1',
+            } as any);
+            let text = data.text
+              .replace(/[|]/g, 'I')
+              .replace(/[`´']/g, "'")
+              .replace(/[""]/g, '"')
+              .trim();
+            
+            newTableData = { isTable: false, text, pageNumber: rotatedResult.pageNumber };
+          }
+
+          reprocessedResults.push({
+            ...rotatedResult,
+            processedImage: newProcessedImage,
+            tableData: newTableData
+          });
+        } else if (firstPageStructure) {
+          // Use first page structure for subsequent pages
+          const quality = await analyzeImageQuality(rotatedResult.originalImage);
+          const enhanced = await enhanceImageAdaptive(rotatedResult.originalImage, quality);
+          const { rowBoundaries, colBoundaries, tableRegion } = firstPageStructure;
+          
+          const maskedImage = await maskOutsideTable(enhanced, tableRegion);
+          const tableRows = await extractCellData(maskedImage, rowBoundaries, colBoundaries, worker, quality, tableRegion);
+          
+          const newTableData: TableData = { isTable: true, rows: tableRows, pageNumber: rotatedResult.pageNumber };
+          const newProcessedImage = await cropToTableRegion(maskedImage, tableRegion);
+          
+          console.log(`Page ${rotatedResult.pageNumber} reprocessed with first page structure: ${tableRows.length} rows`);
+          
+          reprocessedResults.push({
+            ...rotatedResult,
+            processedImage: newProcessedImage,
+            tableData: newTableData
+          });
+        } else {
+          reprocessedResults.push(rotatedResult);
+        }
       }
 
       await worker.terminate();
 
-      // Step 3: Update with new table data
-      const updatedResults = [...pageResults];
-      updatedResults[pageIndex] = {
-        ...result,
-        originalImage: rotated,
-        processedImage: newProcessedImage,
-        tableData: newTableData,
-        rotationApplied: (result.rotationApplied || 0) + angle
-      };
-      setPageResults(updatedResults);
+      // Merge the reprocessed results
+      const { mergedResults, allPages: newAllPages } = mergeMultiPageTables(reprocessedResults);
+      setPageResults(mergedResults);
+      setAllPages(newAllPages);
 
-      // Clear edited data for this page since we have new data
-      setEditedData(prev => {
-        const newData = { ...prev };
-        delete newData[pageIndex];
-        return newData;
-      });
+      // Clear all edited data since we have new data
+      setEditedData({});
 
-      console.log(`Page ${result.pageNumber} rotation complete!`);
+      console.log(`All pages rotation complete!`);
       setLoading(false);
       setProgress(0);
       setIsRotating(false);
     } catch (error) {
       console.error('Error during manual rotation:', error);
-      setError(`Failed to reprocess rotated image: ${error}`);
+      setError(`Failed to reprocess rotated images: ${error}`);
       setLoading(false);
       setProgress(0);
       setIsRotating(false);
     }
   };
-
-
 
   const exportAllToCSV = () => {
     const allTables = pageResults.filter(r => r.tableData.isTable && r.tableData.rows);
@@ -996,6 +1016,75 @@ export default function Home() {
     return tableData;
   };
 
+  const mergeMultiPageTables = (results: PageResult[]): { mergedResults: PageResult[], allPages: PageResult[] } => {
+    if (results.length <= 1) return { mergedResults: results, allPages: results };
+
+    console.log('Checking for multi-page tables to merge...');
+    const merged: PageResult[] = [];
+    let i = 0;
+
+    while (i < results.length) {
+      const current = results[i];
+      
+      // If not a table, just add it
+      if (!current.tableData.isTable || !current.tableData.rows) {
+        merged.push(current);
+        i++;
+        continue;
+      }
+
+      // Start a potential merge group
+      const currentRows = current.tableData.rows;
+      const currentCols = currentRows[0]?.length || 0;
+      let mergedRows = [...currentRows];
+      let lastPageInGroup = i;
+
+      // Check subsequent pages for matching table structure
+      for (let j = i + 1; j < results.length; j++) {
+        const next = results[j];
+        
+        if (!next.tableData.isTable || !next.tableData.rows) break;
+        
+        const nextRows = next.tableData.rows;
+        const nextCols = nextRows[0]?.length || 0;
+
+        // Check if columns match
+        if (nextCols === currentCols) {
+          console.log(`Page ${next.pageNumber} has matching structure (${nextCols} cols), merging...`);
+          
+          // Skip header row on continuation pages (first row is usually header)
+          const dataRows = nextRows.slice(1);
+          mergedRows = [...mergedRows, ...dataRows];
+          lastPageInGroup = j;
+        } else {
+          console.log(`Page ${next.pageNumber} has different structure (${nextCols} vs ${currentCols} cols), stopping merge`);
+          break;
+        }
+      }
+
+      // Create merged result
+      if (lastPageInGroup > i) {
+        console.log(`Merged pages ${i + 1} to ${lastPageInGroup + 1} into single table with ${mergedRows.length} rows`);
+        merged.push({
+          ...current,
+          tableData: {
+            ...current.tableData,
+            rows: mergedRows,
+            pageNumber: current.pageNumber
+          }
+        });
+      } else {
+        merged.push(current);
+      }
+
+      i = lastPageInGroup + 1;
+    }
+
+    console.log(`Merge complete: ${results.length} pages -> ${merged.length} results`);
+    // Return both merged results and all original pages
+    return { mergedResults: merged, allPages: results };
+  };
+
   const processImage = async (imageData: string, pageNum: number, worker: any): Promise<PageResult> => {
     try {
       console.log(`Processing page ${pageNum}...`);
@@ -1093,6 +1182,65 @@ export default function Home() {
     }
   };
 
+  const processImageWithStructure = async (
+    imageData: string, 
+    pageNum: number, 
+    worker: any,
+    structure: { rowBoundaries: number[], colBoundaries: number[], tableRegion: any }
+  ): Promise<PageResult> => {
+    try {
+      console.log(`Processing page ${pageNum} with predefined structure...`);
+      
+      const upscaled = await upscaleImage(imageData, 2);
+      const detectedRotation = await detectRotation(upscaled);
+      
+      let correctedImage = upscaled;
+      let totalRotation = 0;
+      
+      if (detectedRotation !== 0) {
+        console.log(`Applying detected rotation of ${detectedRotation} degrees`);
+        correctedImage = await rotateImage(upscaled, detectedRotation);
+        totalRotation = detectedRotation;
+      }
+
+      const quality = await analyzeImageQuality(correctedImage);
+      const enhanced = await enhanceImageAdaptive(correctedImage, quality);
+
+      // Use the provided structure instead of detecting
+      const { rowBoundaries, colBoundaries, tableRegion } = structure;
+      const numRows = rowBoundaries.length - 1;
+      const numCols = colBoundaries.length - 1;
+      console.log(`Page ${pageNum} - Using structure: ${numRows} rows x ${numCols} columns`);
+
+      let processed = await preprocessImage(correctedImage);
+
+      // Mask out everything outside table
+      const maskedImage = await maskOutsideTable(enhanced, tableRegion);
+      
+      // Extract cells using predefined structure
+      const tableRows = await extractCellData(maskedImage, rowBoundaries, colBoundaries, worker, quality, tableRegion);
+      
+      // For continuation pages, skip header detection - just use all rows
+      console.log(`Page ${pageNum}: Extracted ${tableRows.length} rows`);
+      
+      const tableData: TableData = { isTable: true, rows: tableRows, pageNumber: pageNum };
+      
+      const croppedTable = await cropToTableRegion(maskedImage, tableRegion);
+      processed = croppedTable;
+
+      return {
+        pageNumber: pageNum,
+        originalImage: correctedImage,
+        processedImage: processed,
+        tableData,
+        rotationApplied: totalRotation
+      };
+    } catch (error) {
+      console.error(`Error processing page ${pageNum} with structure:`, error);
+      throw error;
+    }
+  };
+
   const convertPdfPageToImage = async (page: any, scale: number = 4): Promise<string> => {
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
@@ -1129,6 +1277,7 @@ export default function Home() {
       });
 
       const results: PageResult[] = [];
+      let firstPageStructure: { rowBoundaries: number[], colBoundaries: number[], tableRegion: any } | null = null;
 
       for (let pageNum = 1; pageNum <= numPages; pageNum++) {
         setCurrentPage(pageNum);
@@ -1136,12 +1285,38 @@ export default function Home() {
 
         const page = await pdf.getPage(pageNum);
         const imageData = await convertPdfPageToImage(page);
-        const result = await processImage(imageData, pageNum, worker);
-        results.push(result);
+        
+        // For first page, detect structure normally
+        if (pageNum === 1) {
+          const result = await processImage(imageData, pageNum, worker);
+          results.push(result);
+          
+          // Save first page structure if it's a table
+          if (result.tableData.isTable && result.tableData.rows) {
+            const upscaled = await upscaleImage(imageData, 2);
+            const enhanced = await enhanceImageAdaptive(upscaled, await analyzeImageQuality(upscaled));
+            firstPageStructure = await detectTableStructure(enhanced);
+            console.log(`First page structure saved: ${firstPageStructure.rowBoundaries.length - 1} rows x ${firstPageStructure.colBoundaries.length - 1} cols`);
+          }
+        } else {
+          // For subsequent pages, use first page's structure if available
+          if (firstPageStructure && firstPageStructure.rowBoundaries.length >= 2 && firstPageStructure.colBoundaries.length >= 2) {
+            console.log(`Page ${pageNum}: Using first page's table structure`);
+            const result = await processImageWithStructure(imageData, pageNum, worker, firstPageStructure);
+            results.push(result);
+          } else {
+            const result = await processImage(imageData, pageNum, worker);
+            results.push(result);
+          }
+        }
       }
 
       await worker.terminate();
-      return results;
+      
+      // Merge multi-page tables with same structure
+      const { mergedResults, allPages } = mergeMultiPageTables(results);
+      
+      return { mergedResults, allPages };
     } catch (err) {
       console.error('PDF Processing Error:', err);
       throw new Error(`Failed to process PDF: ${err}`);
@@ -1191,8 +1366,9 @@ export default function Home() {
       const fileType = uploadedFile.type;
 
       if (fileType === 'application/pdf') {
-      const results = await processPDF(uploadedFile);
-        setPageResults(results);
+      const { mergedResults, allPages } = await processPDF(uploadedFile);
+        setPageResults(mergedResults);
+        setAllPages(allPages);
         // await indexExtractedResults(results); // Disabled - feature not implemented
         setLoading(false);
         // Process as image
@@ -1564,216 +1740,143 @@ export default function Home() {
           </div>
         )}
 
-        {/* Navigation Controls */}
-        {pageResults.length > 1 && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={goToPreviousPage}
-                disabled={currentPageView === 0}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  currentPageView === 0
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Previous
-              </button>
-              
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Page</span>
-                {pageResults.map((_, idx) => (
+        {/* Two column layout: Images on left, Table on right */}
+        {pageResults.length > 0 && allPages.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* LEFT SIDE: All page images stacked */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {allPages.length === 1 ? 'Document Image' : `All Pages (${allPages.length} pages)`}
+                  </h2>
+                </div>
+                <div className="flex gap-2">
                   <button
-                    key={idx}
-                    onClick={() => {
-                      setCurrentPageView(idx);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      rotatePageManually(0, -90);
                     }}
-                    className={`w-8 h-8 rounded-md text-sm font-medium transition-colors ${
-                      idx === currentPageView
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    disabled={loading}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      loading 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-purple-600 text-white hover:bg-purple-700'
                     }`}
+                    title="Rotate all pages 90° counter-clockwise"
                   >
-                    {idx + 1}
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ transform: 'scaleX(-1)' }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Left
                   </button>
-                ))}
-                <span className="text-sm text-gray-600">of {pageResults.length}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      rotatePageManually(0, 90);
+                    }}
+                    disabled={loading}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      loading 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                    title="Rotate all pages 90° clockwise"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Right
+                  </button>
+                </div>
               </div>
-              
-              <button
-                onClick={goToNextPage}
-                disabled={currentPageView === pageResults.length - 1}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  currentPageView === pageResults.length - 1
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
-              >
-                Next
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+
+              {/* Display all page images stacked */}
+              <div className="space-y-6 max-h-[800px] overflow-y-auto">
+                {allPages.map((result, idx) => (
+                  <div key={idx} className="border-b border-gray-200 pb-6 last:border-b-0 last:pb-0">
+                    <h3 className="text-sm font-medium text-gray-700 mb-3">
+                      Page {result.pageNumber}
+                      {result.rotationApplied !== undefined && result.rotationApplied !== 0 && (
+                        <span className="ml-2 text-xs text-green-600">
+                          (Rotated {result.rotationApplied}°)
+                        </span>
+                      )}
+                    </h3>
+                    <img
+                      src={result.processedImage}
+                      alt={`Page ${result.pageNumber} processed`}
+                      className="w-full border border-gray-300 rounded"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {/* RIGHT SIDE: One merged table with all data */}
+            {pageResults[0].tableData.isTable && pageResults[0].tableData.rows && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Extracted Table ({pageResults[0].tableData.rows.length - 1} rows)
+                  </h3>
+                  <button
+                    onClick={() => setEditMode(!editMode)}
+                    className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                  >
+                    {editMode ? 'Done Editing' : 'Edit Table'}
+                  </button>
+                </div>
+                
+                <div className="overflow-auto max-h-[800px]">
+                  <table className="min-w-full divide-y divide-gray-200 border border-gray-300">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        {pageResults[0].tableData.rows[0].map((header, colIdx) => (
+                          <th
+                            key={colIdx}
+                            className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-300 last:border-r-0"
+                          >
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {(editedData[0] || pageResults[0].tableData.rows).slice(1).map((row, rowIdx) => (
+                        <tr key={rowIdx} className="hover:bg-gray-50">
+                          {row.map((cell, colIdx) => (
+                            <td
+                              key={colIdx}
+                              className="px-4 py-3 text-sm text-gray-900 border-r border-gray-300 last:border-r-0"
+                            >
+                              {editMode ? (
+                                <input
+                                  type="text"
+                                  value={cell}
+                                  onChange={(e) => handleCellEdit(0, rowIdx + 1, colIdx, e.target.value)}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              ) : (
+                                cell
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {pageResults.filter((_, index) => index === currentPageView).map((result, index) => {
-          const actualIndex = currentPageView;
-          return (
-          <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
-              <div>
-                {totalPages > 1 && (
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Page {result.pageNumber} of {totalPages}
-                  </h2>
-                )}
-                {result.rotationApplied !== undefined && result.rotationApplied !== 0 && (
-                  <p className="text-sm text-green-600 mt-1">
-                    Auto-rotated {result.rotationApplied}°
-                  </p>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    rotatePageManually(actualIndex, 90);
-                  }}
-                  disabled={loading}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    loading 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                  title="Rotate 90° clockwise"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Rotate Right
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    rotatePageManually(actualIndex, -90);
-                  }}
-                  disabled={loading}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    loading 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-purple-600 text-white hover:bg-purple-700'
-                  }`}
-                  title="Rotate 90° counter-clockwise"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Rotate Left
-                </button>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Original Image */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Original Image</h3>
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <img
-                    src={result.originalImage}
-                    alt={`Page ${result.pageNumber} Original`}
-                    className="w-full h-auto rounded-md border border-gray-300"
-                  />
-                </div>
-              </div>
-
-              {/* Extracted Data */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-900">Extracted Data</h3>
-                  <button
-                    onClick={toggleEditMode}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                      editMode 
-                        ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100' 
-                        : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'
-                    }`}
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      {editMode ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      )}
-                    </svg>
-                    {editMode ? 'Done' : 'Edit'}
-                  </button>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-auto max-h-[600px]">
-                  {result.tableData.isTable && result.tableData.rows ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-300 border border-gray-300">
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                          {(() => {
-                            const tableRows = editedData[actualIndex] || result.tableData.rows;
-                            return tableRows.map((row, rowIndex) => (
-                              <tr 
-                                key={rowIndex} 
-                                className={
-                                  rowIndex === 0 
-                                    ? 'bg-blue-600' 
-                                    : rowIndex % 2 === 0
-                                    ? 'bg-white hover:bg-gray-50' 
-                                    : 'bg-gray-50 hover:bg-gray-100'
-                                }
-                              >
-                                {row.map((cell, cellIndex) => (
-                                  <td
-                                    key={cellIndex}
-                                    className={`px-3 py-2 text-xs border-r border-gray-200 last:border-r-0 ${
-                                      rowIndex === 0 ? 'text-white font-semibold' : 'text-gray-900'
-                                    }`}
-                                  >
-                                    {editMode ? (
-                                      <input
-                                        type="text"
-                                        value={cell}
-                                        onChange={(e) => handleCellEdit(actualIndex, rowIndex, cellIndex, e.target.value)}
-                                        className="w-full min-w-[100px] px-2 py-1 border border-gray-300 rounded text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                      />
-                                    ) : (
-                                      <div className="min-h-[20px]">
-                                        {cell || ''}
-                                      </div>
-                                    )}
-                                  </td>
-                                ))}
-                              </tr>
-                            ));
-                          })()}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <pre className="whitespace-pre-wrap font-mono text-xs text-gray-800 p-4 bg-white rounded-md border border-gray-300">
-                      {result.tableData.text}
-                    </pre>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-        })}
       </div>
     </div>
   );
