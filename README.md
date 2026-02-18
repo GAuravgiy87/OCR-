@@ -43,6 +43,7 @@
 - 📄 **Multi-Page** - Process entire PDF documents
 - 🎭 **Manual Rotation** - Fine-tune orientation
 - 💾 **Batch Export** - Export all pages at once
+- 🤖 **AI Error Correction** - Gemini AI fixes OCR mistakes
 
 </td>
 </tr>
@@ -74,9 +75,23 @@ cd ocr-app
 # Install dependencies
 npm install
 
+# Set up environment variables (for AI correction)
+cp .env.local.example .env.local
+# Edit .env.local and add your Google Gemini API key
+
 # Run development server
 npm run dev
 ```
+
+### 🔑 Getting Google Gemini API Key
+
+1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Sign in with your Google account
+3. Click "Create API Key"
+4. Copy the key and paste it in `.env.local`:
+   ```
+   NEXT_PUBLIC_GOOGLE_API_KEY=your_api_key_here
+   ```
 
 <div align="center">
 
@@ -1000,7 +1015,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 <br/>
 
-### Made with ❤️ and ☕
+### Made with ❤️ and ☕ Gaurav Singh
 
 <br/>
 
