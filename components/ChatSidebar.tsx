@@ -50,15 +50,17 @@ export default function ChatSidebar() {
       context += `- Size: ${table.rowCount} rows x ${table.columnCount} columns\n`;
       context += `- Data:\n`;
       
-      // Include table data (limit to first 20 rows)
-      table.tableData.slice(0, 20).forEach((row: string[], rowIdx: number) => {
+      // Limit to first 10 rows to reduce context size for LLM
+      const rowLimit = 10;
+      table.tableData.slice(0, rowLimit).forEach((row: string[], rowIdx: number) => {
         context += `  ${rowIdx === 0 ? 'HEADER' : 'Row ' + rowIdx}: ${row.join(' | ')}\n`;
       });
-      if (table.tableData.length > 20) {
-        context += `  ... (${table.tableData.length - 20} more rows)\n`;
+      if (table.tableData.length > rowLimit) {
+        context += `  ... (${table.tableData.length - rowLimit} more rows not shown)\n`;
       }
     });
     
+    console.log('[Chat] Context size:', context.length, 'characters');
     return context;
   };
 
@@ -104,7 +106,7 @@ export default function ChatSidebar() {
       console.error('Chat error:', error);
       const errorMessage: Message = {
         role: 'assistant',
-        content: `Error: ${error.message}\n\nPlease check:\n1. API key is valid\n2. You have credits available\n3. Internet connection is working`,
+        content: `Error: ${error.message}\n\nPlease check:\n1. VM Flask API is running at http://10.7.32.74:5000\n2. Ollama is running inside VM\n3. Network connection is working\n4. LLM might need more time (try a simpler question)`,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -195,12 +197,16 @@ export default function ChatSidebar() {
             
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-gray-100 rounded-lg px-4 py-2">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="bg-gray-100 rounded-lg px-4 py-3 max-w-[80%]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    </div>
+                    <span className="text-sm text-gray-600">Processing with local LLM...</span>
                   </div>
+                  <p className="text-xs text-gray-500">This may take 1-5 minutes depending on the question complexity</p>
                 </div>
               </div>
             )}

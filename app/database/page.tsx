@@ -6,8 +6,10 @@ import * as db from '../../lib/localStorageDB';
 export default function DatabaseViewer() {
   const [documents, setDocuments] = useState<any[]>([]);
   const [tables, setTables] = useState<any[]>([]);
+  const [mappedExcels, setMappedExcels] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [selectedTable, setSelectedTable] = useState<any>(null);
+  const [selectedExcel, setSelectedExcel] = useState<any>(null);
 
   useEffect(() => {
     loadData();
@@ -16,6 +18,7 @@ export default function DatabaseViewer() {
   const loadData = () => {
     setDocuments(db.getAllDocuments());
     setTables(db.getAllTables());
+    setMappedExcels(db.getAllMappedExcels());
     setStats(db.getStatistics());
   };
 
@@ -41,7 +44,7 @@ export default function DatabaseViewer() {
 
         {/* Statistics */}
         {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
             <div className="bg-white rounded-lg shadow p-6">
               <div className="text-sm text-gray-600">Total Documents</div>
               <div className="text-2xl font-bold text-blue-600">{stats.totalDocuments}</div>
@@ -53,6 +56,10 @@ export default function DatabaseViewer() {
             <div className="bg-white rounded-lg shadow p-6">
               <div className="text-sm text-gray-600">Total Tables</div>
               <div className="text-2xl font-bold text-purple-600">{stats.totalTables}</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="text-sm text-gray-600">Mapped Excels</div>
+              <div className="text-2xl font-bold text-indigo-600">{stats.totalMappedExcels}</div>
             </div>
             <div className="bg-white rounded-lg shadow p-6">
               <div className="text-sm text-gray-600">Total Size</div>
@@ -169,6 +176,75 @@ export default function DatabaseViewer() {
           </div>
         </div>
 
+        {/* Mapped Excels List */}
+        <div className="bg-white rounded-lg shadow mt-8">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">Mapped Excel Files</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Excel ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Document</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rows</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Columns</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {mappedExcels.map((excel) => {
+                  const document = documents.find(d => d.id === excel.documentId);
+                  
+                  return (
+                    <tr key={excel.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{excel.id}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {document ? (
+                          <div>
+                            <div className="font-medium">{document.filename}</div>
+                            <div className="text-xs text-gray-500">Doc ID: {document.id}</div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">Unknown</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{excel.rowCount}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{excel.columnCount}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(excel.createdDate).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => setSelectedExcel(excel)}
+                          className="text-blue-600 hover:text-blue-900 mr-3"
+                        >
+                          View Data
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('Delete this mapped Excel?')) {
+                              db.deleteMappedExcel(excel.id);
+                              loadData();
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {mappedExcels.length === 0 && (
+              <div className="text-center py-8 text-gray-500">No mapped Excel files found</div>
+            )}
+          </div>
+        </div>
+
         {/* Table Data Modal */}
         {selectedTable && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -199,6 +275,59 @@ export default function DatabaseViewer() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mapped Excel Data Modal */}
+        {selectedExcel && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-auto">
+              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold">Mapped Excel Data (ID: {selectedExcel.id})</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Document: {documents.find(d => d.id === selectedExcel.documentId)?.filename || 'Unknown'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedExcel(null)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-6">
+                <div className="mb-4 bg-gray-50 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Column Mapping:</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {Object.entries(selectedExcel.columnMapping).map(([target, source]) => (
+                      <div key={target} className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{target}:</span>
+                        <span className="text-gray-600">{source}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="overflow-auto">
+                  <table className="min-w-full divide-y divide-gray-200 border border-gray-300">
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {selectedExcel.mappedData.map((row: string[], rowIdx: number) => (
+                        <tr key={rowIdx} className={rowIdx === 0 ? 'bg-purple-50 font-semibold' : ''}>
+                          {row.map((cell: string, cellIdx: number) => (
+                            <td
+                              key={cellIdx}
+                              className="px-4 py-2 text-sm text-gray-900 border-r border-gray-200"
+                            >
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>

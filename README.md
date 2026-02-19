@@ -43,7 +43,7 @@
 - 📄 **Multi-Page** - Process entire PDF documents
 - 🎭 **Manual Rotation** - Fine-tune orientation
 - 💾 **Batch Export** - Export all pages at once
-- 🤖 **AI Error Correction** - DeepSeek AI chat assistant
+- 🤖 **AI Chat Assistant** - Local LLM (Ollama llama2:7b) via Flask API
 
 </td>
 </tr>
@@ -75,25 +75,37 @@ cd ocr-app
 # Install dependencies
 npm install
 
-# Set up environment variables (for AI chat)
-cp .env.local.example .env.local
-# Edit .env.local and add your DeepSeek API key
+# No API keys needed - uses local LLM server
+# Make sure your VM Flask API is running at http://10.7.32.74:5000
 
 # Run development server
 npm run dev
 ```
 
-### 🔑 Getting DeepSeek API Key
+### 🤖 Local LLM Setup
 
-1. Visit [DeepSeek Platform](https://platform.deepseek.com/)
-2. Sign up or log in to your account
-3. Navigate to API Keys section
-4. Create a new API key
-5. Copy the key and paste it in `.env.local`:
-   ```
-   DEEPSEEK_API_KEY=your_api_key_here
-   NEXT_PUBLIC_DEEPSEEK_API_KEY=your_api_key_here
-   ```
+This app uses a local Ollama LLM server running in a VM:
+
+**Architecture:**
+```
+Next.js Frontend (localhost:3000)
+    ↓
+Next.js API Route (/api/llm)
+    ↓
+VM Flask API (10.7.32.74:5000/api/input)
+    ↓
+Local Ollama (localhost:11434/api/generate)
+    ↓
+Model: llama2:7b
+```
+
+**Requirements:**
+1. VM with Flask API running at `http://10.7.32.74:5000`
+2. Ollama server running inside VM at `http://localhost:11434`
+3. Model `llama2:7b` installed in Ollama
+4. Network connectivity between Next.js app and VM
+
+**No API keys required!** Everything runs locally on your network.
 
 <div align="center">
 

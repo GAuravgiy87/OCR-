@@ -1,6 +1,65 @@
 # Version History
 
-## v2.1.0 - AI Chat Update (Current)
+## v2.2.0 - Local LLM Integration (Current)
+**Release Date:** 2024-02-18
+
+### 🎉 Major Changes
+
+#### 🤖 Local LLM Integration
+- **Removed External APIs** - No more OpenAI, Gemini, or DeepSeek dependencies
+- **Local Ollama Server** - Uses llama2:7b model running in VM
+- **Flask API Wrapper** - Python Flask API at http://10.7.32.74:5000
+- **No API Keys Required** - Everything runs on your local network
+- **Privacy First** - All data stays on your infrastructure
+- **120 Second Timeout** - Handles long LLM responses
+- **Comprehensive Logging** - Debug-friendly console output
+
+#### 🏗️ Architecture
+```
+Next.js Frontend (localhost:3000)
+    ↓ /api/chat
+Next.js API Route (/api/llm)
+    ↓ POST to http://10.7.32.74:5000/api/input
+VM Flask API
+    ↓ POST to http://localhost:11434/api/generate
+Local Ollama (llama2:7b)
+    ↓ Response
+Back to UI
+```
+
+### 🔧 Technical Details
+
+#### New API Routes
+- **`/api/llm`** - Proxy to VM Flask API
+  - Accepts: `{ "prompt": "text" }`
+  - Returns: `{ "success": true, "output": "...", "processingTime": 1234 }`
+  - Timeout: 120 seconds
+  - Error handling: Network, timeout, validation errors
+
+#### Updated Routes
+- **`/api/chat`** - Now uses local LLM instead of external APIs
+  - Builds context from database
+  - Formats prompt for llama2
+  - Calls `/api/llm` internally
+
+### 🛡️ Error Handling
+- Network errors (VM unreachable)
+- Timeout errors (120s limit)
+- Invalid response format
+- Missing prompt validation
+- Detailed error messages with troubleshooting
+
+### 📝 Benefits
+- ✅ No API costs
+- ✅ Complete privacy
+- ✅ No rate limits
+- ✅ Works offline (local network only)
+- ✅ Customizable model
+- ✅ Full control over infrastructure
+
+---
+
+## v2.1.0 - AI Chat Update
 **Release Date:** 2024-02-18
 
 ### 🎉 New Features
@@ -185,7 +244,8 @@
 - **Next.js** - React framework
 - **Tesseract.js** - OCR engine
 - **PDF.js** - PDF rendering
-- **DeepSeek AI** - AI chat assistant
+- **Local Ollama** - LLM (llama2:7b)
+- **Flask API** - Python wrapper for Ollama
 - **Tailwind CSS** - Styling
 
 ### Contributors
@@ -203,4 +263,4 @@ For issues and questions:
 
 ---
 
-**Last Updated:** 2024-02-18 (v2.1.0)
+**Last Updated:** 2024-02-18 (v2.2.0)

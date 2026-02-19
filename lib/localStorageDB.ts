@@ -29,6 +29,16 @@ export interface ExtractedTable {
   columnCount: number;
 }
 
+export interface MappedExcel {
+  id: number;
+  documentId: number;
+  mappedData: string[][];
+  columnMapping: { [key: string]: string };
+  rowCount: number;
+  columnCount: number;
+  createdDate: string;
+}
+
 // Helper to get next ID
 const getNextId = (key: string): number => {
   try {
@@ -191,16 +201,68 @@ export const deleteTable = (id: number): void => {
   localStorage.setItem('tables', JSON.stringify(filtered));
 };
 
+// Mapped Excel operations
+export const saveMappedExcel = (
+  documentId: number,
+  mappedData: string[][],
+  columnMapping: { [key: string]: string }
+): number => {
+  try {
+    const excels = JSON.parse(localStorage.getItem('mapped_excels') || '[]');
+    const id = getNextId('mapped_excels');
+    
+    const newExcel: MappedExcel = {
+      id,
+      documentId,
+      mappedData,
+      columnMapping,
+      rowCount: mappedData.length,
+      columnCount: mappedData[0]?.length || 0,
+      createdDate: new Date().toISOString(),
+    };
+    
+    excels.push(newExcel);
+    localStorage.setItem('mapped_excels', JSON.stringify(excels));
+    console.log('Saved mapped Excel with ID:', id);
+    return id;
+  } catch (error) {
+    console.error('Error saving mapped Excel:', error);
+    throw error;
+  }
+};
+
+export const getMappedExcelsByDocument = (documentId: number): MappedExcel[] => {
+  const excels = JSON.parse(localStorage.getItem('mapped_excels') || '[]');
+  return excels.filter((excel: MappedExcel) => excel.documentId === documentId);
+};
+
+export const getAllMappedExcels = (): MappedExcel[] => {
+  return JSON.parse(localStorage.getItem('mapped_excels') || '[]');
+};
+
+export const getMappedExcel = (id: number): MappedExcel | null => {
+  const excels = getAllMappedExcels();
+  return excels.find(excel => excel.id === id) || null;
+};
+
+export const deleteMappedExcel = (id: number): void => {
+  const excels = JSON.parse(localStorage.getItem('mapped_excels') || '[]');
+  const filtered = excels.filter((excel: MappedExcel) => excel.id !== id);
+  localStorage.setItem('mapped_excels', JSON.stringify(filtered));
+};
+
 // Statistics
 export const getStatistics = () => {
   const documents = getAllDocuments();
   const pages = JSON.parse(localStorage.getItem('pages') || '[]');
   const tables = getAllTables();
+  const excels = getAllMappedExcels();
   
   return {
     totalDocuments: documents.length,
     totalPages: pages.length,
     totalTables: tables.length,
+    totalMappedExcels: excels.length,
     totalSize: documents.reduce((sum, doc) => sum + doc.fileSize, 0),
   };
 };
@@ -252,6 +314,11 @@ export default {
   saveTable,
   getTableByPage,
   getAllTables,
+  saveMappedExcel,
+  getMappedExcelsByDocument,
+  getAllMappedExcels,
+  getMappedExcel,
+  deleteMappedExcel,
   searchDocuments,
   getStatistics,
   cleanupOldData,
