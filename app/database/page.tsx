@@ -305,7 +305,7 @@ export default function DatabaseViewer() {
                     {Object.entries(selectedExcel.columnMapping).map(([target, source]) => (
                       <div key={target} className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{target}:</span>
-                        <span className="text-gray-600">{source}</span>
+                        <span className="text-gray-600">{String(source)}</span>
                       </div>
                     ))}
                   </div>
@@ -318,7 +318,11 @@ export default function DatabaseViewer() {
                           {row.map((cell: string, cellIdx: number) => (
                             <td
                               key={cellIdx}
-                              className="px-4 py-2 text-sm text-gray-900 border-r border-gray-200"
+                              className={`px-4 py-2 text-sm border-r border-gray-200 ${
+                                cell === '[MISSING]' 
+                                  ? 'bg-red-50 text-red-600 font-medium' 
+                                  : 'text-gray-900'
+                              }`}
                             >
                               {cell}
                             </td>

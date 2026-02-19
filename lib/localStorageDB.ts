@@ -33,6 +33,7 @@ export interface MappedExcel {
   id: number;
   documentId: number;
   mappedData: string[][];
+  mappedText: string; // CSV as text for Ollama to read
   columnMapping: { [key: string]: string };
   rowCount: number;
   columnCount: number;
@@ -211,10 +212,14 @@ export const saveMappedExcel = (
     const excels = JSON.parse(localStorage.getItem('mapped_excels') || '[]');
     const id = getNextId('mapped_excels');
     
+    // Convert mapped data to text format for Ollama
+    const mappedText = mappedData.map(row => row.join(' | ')).join('\n');
+    
     const newExcel: MappedExcel = {
       id,
       documentId,
       mappedData,
+      mappedText, // Store as text for Ollama
       columnMapping,
       rowCount: mappedData.length,
       columnCount: mappedData[0]?.length || 0,
@@ -224,6 +229,7 @@ export const saveMappedExcel = (
     excels.push(newExcel);
     localStorage.setItem('mapped_excels', JSON.stringify(excels));
     console.log('Saved mapped Excel with ID:', id);
+    console.log('Mapped text preview:', mappedText.substring(0, 200) + '...');
     return id;
   } catch (error) {
     console.error('Error saving mapped Excel:', error);

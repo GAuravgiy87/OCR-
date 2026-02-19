@@ -1679,12 +1679,14 @@ export default function Home() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button
-                onClick={applyMapping}
-                className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
-              >
-                Refresh Mapping
-              </button>
+              {mappedData && (
+                <button
+                  onClick={() => saveMappedDataToDatabase(false)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Save
+                </button>
+              )}
               {mappedData && (
                 <button
                   onClick={exportMappedData}

@@ -27,40 +27,101 @@ export default function ChatSidebar() {
   const getContextFromDatabase = () => {
     const documents = db.getAllDocuments();
     const tables = db.getAllTables();
+    const mappedExcels = db.getAllMappedExcels();
     const pages = JSON.parse(localStorage.getItem('pages') || '[]');
     
-    let context = `Total Documents: ${documents.length}\n`;
-    context += `Total Tables: ${tables.length}\n\n`;
+    let context = '=== DATABASE CONTENTS ===\n\n';
+    context += `Total Documents: ${documents.length}\n`;
+    context += `Total Tables: ${tables.length}\n`;
+    context += `Total Mapped Excel Files: ${mappedExcels.length}\n\n`;
     
-    context += 'Documents:\n';
+    // Add all documents info
+    context += '=== DOCUMENTS ===\n';
     documents.forEach(doc => {
-      context += `- Document ID: ${doc.id}, Filename: ${doc.filename}, Pages: ${doc.totalPages}, Uploaded: ${new Date(doc.uploadDate).toLocaleDateString()}\n`;
+      context += `Document ID ${doc.id}: ${doc.filename} (${doc.totalPages} pages, uploaded ${new Date(doc.uploadDate).toLocaleDateString()})\n`;
     });
+    context += '\n';
     
-    context += '\nExtracted Tables with Document Info:\n';
-    tables.forEach((table, idx) => {
-      // Find the page this table belongs to
-      const page = pages.find((p: any) => p.id === table.pageId);
-      const document = page ? documents.find(d => d.id === page.documentId) : null;
-      
-      context += `\nTable ${idx + 1}:\n`;
-      context += `- Table ID: ${table.id}\n`;
-      context += `- From Document: ${document ? document.filename : 'Unknown'} (Doc ID: ${page?.documentId || 'N/A'})\n`;
-      context += `- Page Number: ${page?.pageNumber || 'N/A'}\n`;
-      context += `- Size: ${table.rowCount} rows x ${table.columnCount} columns\n`;
-      context += `- Data:\n`;
-      
-      // Limit to first 10 rows to reduce context size for LLM
-      const rowLimit = 10;
-      table.tableData.slice(0, rowLimit).forEach((row: string[], rowIdx: number) => {
-        context += `  ${rowIdx === 0 ? 'HEADER' : 'Row ' + rowIdx}: ${row.join(' | ')}\n`;
-      });
-      if (table.tableData.length > rowLimit) {
-        context += `  ... (${table.tableData.length - rowLimit} more rows not shown)\n`;
+    // Add all page text content
+    context += '=== EXTRACTED TEXT FROM PAGES ===\n';
+    pages.forEach((page: any) => {
+      if (page.extractedText && page.extractedText.trim()) {
+        const document = documents.find(d => d.id === page.documentId);
+        context += `\nFrom Document: ${document?.filename || 'Unknown'} (Page ${page.pageNumber}):\n`;
+        context += page.extractedText + '\n';
       }
     });
+    context += '\n';
+    
+    // Add table data (limit to first 3 tables, first 5 rows each)
+    const maxTables = 3;
+    const tablesToShow = tables.slice(0, maxTables);
+    
+    if (tablesToShow.length > 0) {
+      context += '=== EXTRACTED TABLES ===\n';
+      tablesToShow.forEach((table, idx) => {
+        const page = pages.find((p: any) => p.id === table.pageId);
+        const document = page ? documents.find(d => d.id === page.documentId) : null;
+        
+        context += `\nTable ${idx + 1} from ${document?.filename || 'Unknown'} (Page ${page?.pageNumber || 'N/A'}):\n`;
+        
+        const rowLimit = 5;
+        table.tableData.slice(0, rowLimit).forEach((row: string[], rowIdx: number) => {
+          context += `${row.join(' | ')}\n`;
+        });
+        if (table.tableData.length > rowLimit) {
+          context += `... (${table.tableData.length - rowLimit} more rows)\n`;
+        }
+      });
+      
+      if (tables.length > maxTables) {
+        context += `\n(${tables.length - maxTables} more tables not shown)\n`;
+      }
+      context += '\n';
+    }
+    
+    // Add ALL mapped Excel data (this is the cleaned/processed data)
+    if (mappedExcels.length > 0) {
+      context += '=== MAPPED/PROCESSED DATA (MOST IMPORTANT) ===\n';
+      context += 'This is the cleaned and organized data from the documents:\n\n';
+      
+      mappedExcels.forEach((excel, idx) => {
+        const document = documents.find(d => d.id === excel.documentId);
+        
+        context += `Mapped Data ${idx + 1} from ${document?.filename || 'Unknown'}:\n`;
+        
+        // Include full mapped text (limited to 3000 chars per file)
+        const textLimit = 3000;
+        const limitedText = excel.mappedText.length > textLimit 
+          ? excel.mappedText.substring(0, textLimit) + '\n... (truncated)'
+          : excel.mappedText;
+        context += limitedText + '\n\n';
+      });
+    }
     
     console.log('[Chat] Context size:', context.length, 'characters');
+    
+    // If context is too large, prioritize mapped Excel data
+    const maxContextSize = 5000;
+    if (context.length > maxContextSize) {
+      console.warn('[Chat] Context too large, prioritizing mapped data...');
+      
+      // Rebuild with only mapped Excel data
+      context = '=== DATABASE CONTENTS ===\n\n';
+      context += '=== MAPPED/PROCESSED DATA ===\n';
+      context += 'This is the cleaned and organized data from the documents:\n\n';
+      
+      mappedExcels.forEach((excel, idx) => {
+        const document = documents.find(d => d.id === excel.documentId);
+        context += `Data from ${document?.filename || 'Unknown'}:\n`;
+        const textLimit = 2000;
+        const limitedText = excel.mappedText.length > textLimit 
+          ? excel.mappedText.substring(0, textLimit) + '\n... (truncated)'
+          : excel.mappedText;
+        context += limitedText + '\n\n';
+      });
+    }
+    
     return context;
   };
 
@@ -80,6 +141,15 @@ export default function ChatSidebar() {
     try {
       const context = getContextFromDatabase();
       
+      // Log what we're sending
+      console.log('='.repeat(60));
+      console.log('[Chat] Sending to API');
+      console.log('='.repeat(60));
+      console.log('[Chat] Question:', input);
+      console.log('[Chat] Context length:', context.length, 'characters');
+      console.log('[Chat] Context preview:', context.substring(0, 500) + '...');
+      console.log('='.repeat(60));
+      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,6 +160,9 @@ export default function ChatSidebar() {
       });
 
       const data = await response.json();
+      
+      console.log('[Chat] Response status:', response.status);
+      console.log('[Chat] Response data:', data);
       
       if (!response.ok) {
         throw new Error(data.details || data.error || 'Failed to get response');
@@ -162,7 +235,7 @@ export default function ChatSidebar() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
             {messages.length === 0 && (
               <div className="text-center text-gray-500 mt-8">
                 <svg className="w-12 h-12 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,9 +277,9 @@ export default function ChatSidebar() {
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                     </div>
-                    <span className="text-sm text-gray-600">Processing with local LLM...</span>
+                    <span className="text-sm text-gray-600">Processing with Llama2...</span>
                   </div>
-                  <p className="text-xs text-gray-500">This may take 1-5 minutes depending on the question complexity</p>
+                  <p className="text-xs text-gray-500">This may take 2-10 minutes depending on the question complexity and data size</p>
                 </div>
               </div>
             )}
