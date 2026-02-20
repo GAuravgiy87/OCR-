@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     // Forward request to VM Flask API
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 300000); // 300 second (5 minute) timeout
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 600 second (10 minute) timeout
 
     try {
       const response = await fetch('http://10.7.32.74:5000/api/input', {
@@ -86,9 +86,9 @@ export async function POST(request: NextRequest) {
       clearTimeout(timeoutId);
       
       if (fetchError.name === 'AbortError') {
-        console.error('[LLM API] Request timeout after 300 seconds');
+        console.error('[LLM API] Request timeout after 600 seconds');
         return NextResponse.json(
-          { error: 'Request timeout', details: 'LLM server took too long to respond (>5 minutes)' },
+          { error: 'Request timeout', details: 'LLM server took too long to respond (>10 minutes)' },
           { status: 504 }
         );
       }
