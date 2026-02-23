@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import * as db from '../../lib/localStorageDB';
+import Toast, { ToastType } from '../../components/Toast';
+import ConfirmModal from '../../components/ConfirmModal';
 
 export default function DatabaseViewer() {
   const [documents, setDocuments] = useState<any[]>([]);
@@ -10,6 +12,33 @@ export default function DatabaseViewer() {
   const [stats, setStats] = useState<any>(null);
   const [selectedTable, setSelectedTable] = useState<any>(null);
   const [selectedExcel, setSelectedExcel] = useState<any>(null);
+
+  // Toast and modal state
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const showToast = (message: string, type: ToastType = 'info') => {
+    setToast({ message, type });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirm,
+    });
+  };
 
   useEffect(() => {
     loadData();
@@ -23,10 +52,15 @@ export default function DatabaseViewer() {
   };
 
   const handleDelete = (id: number) => {
-    if (confirm('Are you sure you want to delete this document?')) {
-      db.deleteDocument(id);
-      loadData();
-    }
+    showConfirm(
+      'Delete Document',
+      'Are you sure you want to delete this document? This action cannot be undone.',
+      () => {
+        db.deleteDocument(id);
+        loadData();
+        showToast('Document deleted successfully', 'success');
+      }
+    );
   };
 
   const formatBytes = (bytes: number) => {
@@ -224,10 +258,15 @@ export default function DatabaseViewer() {
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm('Delete this mapped Excel?')) {
-                              db.deleteMappedExcel(excel.id);
-                              loadData();
-                            }
+                            showConfirm(
+                              'Delete Mapped Excel',
+                              'Are you sure you want to delete this mapped Excel file? This action cannot be undone.',
+                              () => {
+                                db.deleteMappedExcel(excel.id);
+                                loadData();
+                                showToast('Mapped Excel deleted successfully', 'success');
+                              }
+                            );
                           }}
                           className="text-red-600 hover:text-red-900"
                         >
@@ -337,6 +376,28 @@ export default function DatabaseViewer() {
           </div>
         )}
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => {
+          confirmModal.onConfirm();
+          setConfirmModal({ ...confirmModal, isOpen: false });
+        }}
+        onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        type="danger"
+      />
     </div>
   );
 }

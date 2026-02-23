@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getStatistics } from '@/lib/database';
+import { getStatistics } from '@/lib/localStorageDB';
 
 // GET statistics
 export async function GET() {

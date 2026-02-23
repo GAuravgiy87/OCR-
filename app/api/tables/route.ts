@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { saveTable, getTableByPage, getAllTables } from '@/lib/database';
+import { saveTable, getTableByPage, getAllTables } from '@/lib/localStorageDB';
 
 // GET tables
 export async function GET(request: NextRequest) {

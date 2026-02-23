@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { saveDocument, getAllDocuments, getDocument, deleteDocument } from '@/lib/database';
+import { saveDocument, getAllDocuments, getDocument, deleteDocument } from '@/lib/localStorageDB';
 
 // GET all documents
 export async function GET(request: NextRequest) {

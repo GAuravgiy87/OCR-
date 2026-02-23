@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { createWorker } from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { correctTableData, correctTextData } from '../lib/aiCorrection';
 import { saveDocumentWithPages } from '../lib/dbService';
+import Toast, { ToastType } from '../components/Toast';
+import ConfirmModal from '../components/ConfirmModal';
 
 interface TableData {
   isTable: boolean;
@@ -22,6 +25,7 @@ interface PageResult {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pageResults, setPageResults] = useState<PageResult[]>([]);
   const [allPages, setAllPages] = useState<PageResult[]>([]); // Store all original pages
@@ -44,6 +48,34 @@ export default function Home() {
   const [isAiCorrecting, setIsAiCorrecting] = useState(false);
   const [isSavingToDb, setIsSavingToDb] = useState(false);
   const [currentFileName, setCurrentFileName] = useState<string>('');
+  const [currentDocId, setCurrentDocId] = useState<number | null>(null);
+
+  // Toast and modal state
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const showToast = (message: string, type: ToastType = 'info') => {
+    setToast({ message, type });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirm,
+    });
+  };
 
   // Predefined columns for mapping
   const predefinedColumns = [
@@ -232,14 +264,15 @@ export default function Home() {
         pageResults
       );
       
-      if (result.success) {
-        alert(`Document saved successfully! Document ID: ${result.documentId}`);
+      if (result.success && result.documentId) {
+        setCurrentDocId(result.documentId);
+        showToast(`Document saved successfully! Document ID: ${result.documentId}`, 'success');
       } else {
-        alert('Failed to save document to database');
+        showToast('Failed to save document to database', 'error');
       }
     } catch (error) {
       console.error('Error saving to database:', error);
-      alert('Error saving to database');
+      showToast('Error saving to database', 'error');
     } finally {
       setIsSavingToDb(false);
     }
@@ -281,12 +314,62 @@ export default function Home() {
       );
       
       setPageResults(correctedResults);
-      alert('AI correction applied successfully!');
+      showToast('AI correction applied successfully!', 'success');
     } catch (error) {
       console.error('Error applying AI correction:', error);
-      alert('Error applying AI correction');
+      showToast('Error applying AI correction', 'error');
     } finally {
       setIsAiCorrecting(false);
+    }
+  };
+
+  const saveMappedDataToDatabase = async (silent: boolean = false) => {
+    if (!mappedData || mappedData.length === 0) {
+      showToast('No mapped data to save', 'warning');
+      return;
+    }
+
+    if (!currentDocId) {
+      showToast('Please save the document to database first', 'warning');
+      return;
+    }
+
+    setIsSavingToDb(true);
+
+    try {
+      // Convert mapped data to CSV text
+      const mappedText = mappedData.map(row => 
+        row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')
+      ).join('\n');
+
+      const response = await fetch('/api/mapped-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          documentId: currentDocId,
+          mappedData: mappedData,
+          columnMapping: columnMapping,
+          mappedText: mappedText,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        if (!silent) {
+          showToast(`Mapped data saved successfully! ID: ${data.id}`, 'success');
+        }
+        console.log('[SaveMappedData] Saved with ID:', data.id);
+      } else {
+        throw new Error(data.error || 'Failed to save mapped data');
+      }
+    } catch (error: any) {
+      console.error('[SaveMappedData] Error:', error);
+      showToast(error.message || 'Error saving mapped data', 'error');
+    } finally {
+      setIsSavingToDb(false);
     }
   };
 
@@ -1438,6 +1521,7 @@ export default function Home() {
   };
 
   return (
+    <>
     <div className="min-h-screen bg-slate-50">
       {/* Loading Indicator */}
       {(isRotating || isAiCorrecting) && (
@@ -1480,14 +1564,41 @@ export default function Home() {
                 <p className="text-xs text-gray-500">Extract tables and text from documents</p>
               </div>
             </div>
-            {pageResults.length > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-md">
-                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-sm font-medium text-green-700">{pageResults.length} page{pageResults.length > 1 ? 's' : ''}</span>
-              </div>
-            )}
+
+            <div className="flex items-center gap-4">
+              {/* Navigation Buttons */}
+              {currentDocId && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => router.push(`/database?docId=${currentDocId}`)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                    </svg>
+                    Database
+                  </button>
+                  <button
+                    onClick={() => router.push(`/chat?docId=${currentDocId}`)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                    AI Chat
+                  </button>
+                </div>
+              )}
+
+              {pageResults.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-md">
+                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-medium text-green-700">{pageResults.length} page{pageResults.length > 1 ? 's' : ''}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -1540,6 +1651,42 @@ export default function Home() {
                       </div>
                     </div>
                   </label>
+                </div>
+
+                {/* Quick Access Navigation */}
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Quick Access</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => router.push('/database')}
+                      className="flex items-center justify-center gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors group"
+                    >
+                      <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-gray-200 group-hover:border-gray-300 transition-colors">
+                        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-medium text-gray-900">Database</p>
+                        <p className="text-xs text-gray-500">View saved documents</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => router.push('/chat')}
+                      className="flex items-center justify-center gap-3 px-4 py-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors group"
+                    >
+                      <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-blue-200 group-hover:border-blue-300 transition-colors">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-medium text-gray-900">AI Chat</p>
+                        <p className="text-xs text-gray-500">Ask about documents</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
 
                 {loading && (
@@ -1627,6 +1774,17 @@ export default function Home() {
                     >
                       {isSavingToDb ? 'Saving...' : 'Save to DB'}
                     </button>
+                    {currentDocId && (
+                      <button
+                        onClick={() => router.push(`/chat?docId=${currentDocId}`)}
+                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                        </svg>
+                        AI Chat
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -1881,6 +2039,29 @@ export default function Home() {
 
       </div>
     </div>
+
+    {/* Toast Notification */}
+    {toast && (
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)}
+      />
+    )}
+
+    {/* Confirmation Modal */}
+    <ConfirmModal
+      isOpen={confirmModal.isOpen}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      onConfirm={() => {
+        confirmModal.onConfirm();
+        setConfirmModal({ ...confirmModal, isOpen: false });
+      }}
+      onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+      type="warning"
+    />
+    </>
   );
 }
 

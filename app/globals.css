@@ -1,15 +1,42 @@
+/**
+ * Global Styles
+ * 
+ * This file contains global CSS styles applied across the entire application.
+ * It includes:
+ * - Tailwind CSS imports
+ * - CSS custom properties (variables) for theming
+ * - Base styles for common elements
+ * - Custom scrollbar styling
+ * - Accessibility improvements
+ * - Animation keyframes for toast and modal
+ * 
+ * @file globals.css
+ */
+
+/* Import Tailwind CSS utilities */
 @import "tailwindcss";
 
+/**
+ * CSS Custom Properties (Variables)
+ * 
+ * These variables define the color scheme and can be easily changed
+ * to update the entire application's theme.
+ */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --primary: #2563eb;
-  --primary-dark: #1e40af;
-  --secondary: #64748b;
-  --border: #e2e8f0;
-  --card: #ffffff;
+  --background: #f8fafc;      /* Light gray background */
+  --foreground: #0f172a;      /* Dark text color */
+  --primary: #2563eb;         /* Blue primary color */
+  --primary-dark: #1e40af;    /* Darker blue for hover states */
+  --secondary: #64748b;       /* Gray secondary color */
+  --border: #e2e8f0;          /* Light border color */
+  --card: #ffffff;            /* White card background */
 }
 
+/**
+ * Tailwind Theme Integration
+ * 
+ * Maps CSS variables to Tailwind's theme system for use in utility classes.
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -17,70 +44,157 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/**
+ * Universal Box Sizing
+ * 
+ * Ensures all elements use border-box sizing for more predictable layouts.
+ */
 * {
   box-sizing: border-box;
 }
 
+/**
+ * Body Base Styles
+ * 
+ * Sets up the default appearance for the entire application.
+ */
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;  /* Smoother text rendering on macOS */
+  -moz-osx-font-smoothing: grayscale;   /* Smoother text rendering on macOS */
   margin: 0;
   padding: 0;
 }
 
-/* Professional scrollbar */
+/**
+ * Custom Scrollbar Styling
+ * 
+ * Provides a professional, minimal scrollbar design for webkit browsers
+ * (Chrome, Safari, Edge).
+ */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 8px;   /* Vertical scrollbar width */
+  height: 8px;  /* Horizontal scrollbar height */
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #f1f5f9;  /* Light gray track */
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: #cbd5e1;  /* Medium gray thumb */
+  border-radius: 4px;   /* Rounded corners */
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #94a3b8;  /* Darker gray on hover */
 }
 
-/* Smooth transitions for interactive elements */
+/**
+ * Button Transitions
+ * 
+ * Adds smooth transitions to all buttons for better user experience.
+ */
 button {
   transition: all 0.2s ease;
 }
 
+/**
+ * Button Active State
+ * 
+ * Provides visual feedback when buttons are clicked.
+ * Disabled buttons are excluded to prevent confusing interactions.
+ */
 button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.98);  /* Slight shrink effect */
 }
 
-/* Focus styles for accessibility */
+/**
+ * Focus Styles for Accessibility
+ * 
+ * Provides clear visual indicators when interactive elements receive keyboard focus.
+ * Uses :focus-visible to only show outline for keyboard navigation, not mouse clicks.
+ */
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
+  outline: 2px solid #2563eb;  /* Blue outline */
+  outline-offset: 2px;         /* Space between element and outline */
 }
 
-/* Table improvements */
+/**
+ * Table Improvements
+ * 
+ * Ensures table borders collapse properly for cleaner appearance.
+ */
 table {
   border-collapse: collapse;
 }
 
-/* Input improvements */
+/**
+ * Input Font Size
+ * 
+ * Sets consistent font size for form inputs.
+ */
 input[type="text"],
 input[type="file"],
 select {
   font-size: 14px;
 }
 
-/* Prevent text selection on buttons */
+/**
+ * Prevent Text Selection on Buttons
+ * 
+ * Improves UX by preventing accidental text selection when clicking buttons.
+ */
 button {
   user-select: none;
   -webkit-user-select: none;
+}
+
+/**
+ * Toast Slide-In Animation
+ * 
+ * Animates toast notifications entering from the right side of the screen.
+ */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);  /* Start off-screen to the right */
+    opacity: 0;                   /* Start invisible */
+  }
+  to {
+    transform: translateX(0);     /* End at normal position */
+    opacity: 1;                   /* End fully visible */
+  }
+}
+
+/**
+ * Modal Scale-In Animation
+ * 
+ * Animates modal dialogs appearing with a subtle scale effect.
+ */
+@keyframes scale-in {
+  from {
+    transform: scale(0.9);  /* Start slightly smaller */
+    opacity: 0;             /* Start invisible */
+  }
+  to {
+    transform: scale(1);    /* End at normal size */
+    opacity: 1;             /* End fully visible */
+  }
+}
+
+/**
+ * Animation Utility Classes
+ * 
+ * Apply these classes to elements to trigger animations.
+ */
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
 }
